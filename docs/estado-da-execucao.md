@@ -15,7 +15,7 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-01 estrutura do repositório | ✅ | `runtime/`, `hub/`, `supabase/` criados |
 | E0-02 runtime (uv, pytest, ruff, módulos) | ✅ | `ruff check` verde · `lint-imports` 3/3 contratos · `pytest -m unit` sai 5 (vermelho esperado) |
 | E0-03 hub (Next.js, pnpm, Playwright) | ✅ | `pnpm build`, `lint` e `typecheck` verdes (exit 0) |
-| E0-04 supabase (config) | ⚠️ parcial | `config.toml` gerado e ajustado; **`supabase start` nunca foi executado — falta Docker** |
+| E0-04 supabase (config) | ✅ | `config.toml` gerado e ajustado; com o Docker resolvido, `supabase start` (forma enxuta) rodou de fato nos E0-07 e E0-08 e a **R2 foi fechada** — a imagem local traz `pgmq` 1.5.1 e `vector` 0.8.2 |
 | E0-05 CLAUDE.md + convenções | ✅ | seção Commands preenchida; duplicação do arquivo removida; Figma → Claude Design |
 
 **Trilha T2 (harness + CI) — iniciada.**
@@ -39,11 +39,12 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-17 harness de regressão visual | ✅ PRs [#9](https://github.com/matheusmarques6/agents-worder/pull/9) e [#10](https://github.com/matheusmarques6/agents-worder/pull/10) | ciclo inteiro executado **no CI**: gate vermelho por baseline ausente (4 PNGs, `A snapshot doesn't exist`) → `update-baselines` no runner ([30753971421](https://github.com/matheusmarques6/agents-worder/actions/runs/30753971421)) → artefato commitado → gate verde. Nenhuma baseline saiu desta máquina |
 | E0-15 · L1 ação e entrada | ✅ PR [#11](https://github.com/matheusmarques6/agents-worder/pull/11) | 12 asserções objetivas vistas **vermelhas** primeiro (altura e raio por tamanho, lg ≥ 44, disabled/loading reais, erro anunciado, foco visível, switch, escolha exclusiva, chips acumulando) · 8 baselines novas geradas no runner · as 4 do vidro **inalteradas**, o que prova que o lote não vazou para o 03 |
 | E0-15 · L2 status e feedback | ✅ PR [#12](https://github.com/matheusmarques6/agents-worder/pull/12) | 13 asserções vistas **vermelhas** primeiro · nenhum par de status compartilha cor e todo status escreve o estado por extenso · duas composições entre lotes (toast = `<Glass level="overlay">`, estado vazio consome o Button do L1) · a revisão da baseline light pegou ilegibilidade generalizada, corrigida antes do merge |
+| E0-15 · L4 conversa e sobreposição | ✅ PR [#13](https://github.com/matheusmarques6/agents-worder/pull/13) | 13 asserções vermelhas primeiro · **as duas metades da regra do vidro lado a lado no mesmo card**: modal e menu mantêm `blur(40px)`, vidro aninhado perde · modal é `<dialog>` nativo, modalidade provada pelo `::backdrop` · terceira ilegibilidade de light pega pela revisão de imagem |
 | E0-14 primitivo Glass | ✅ | 8 asserções de estilo computado × 2 viewports, vermelhas primeiro (rota e componente inexistentes) · trava estendida vista reprovando contra `rgba()` num componente e `backdrop-blur` fora do vidro · 404 da vitrine provado contra um **segundo servidor** sem a flag |
 
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
 
-O E0-08 fecha o nível `pipeline`: existe agora **um teste real de cada nível** (`unit`, `db`, `rls`, `pipeline`, E2E), que é a primeira das oito provas do §12 do plano — falta só rodá-los no CI.
+O E0-08 fecha o nível `pipeline`: existe **um teste real de cada nível** (`unit`, `db`, `rls`, `pipeline`, E2E), e o E0-11 os colocou para rodar no CI — a primeira das oito provas do §12 do plano está fechada.
 
 ---
 
@@ -78,14 +79,66 @@ Depois disso o Docker Desktop ainda não subia, por dois motivos independentes:
 
 ---
 
-## A retomada, em ordem
+## Checklist de desenvolvimento
 
-1. **Trilha T3** (E0-13 tokens → E0-18) — é o próximo bloco. Fecha também a **N3**, a única prova negativa que falta.
-2. **Trilha T4** (E0-19 → E0-23) — bloqueada em B-1/B-2/B-3.
+Os quadros de "Onde paramos" são o **registro** — item, estado e prova executada. Esta seção é a **lista de trabalho**: o que falta, na ordem em que é executável. O que já fechou aparece aqui só como uma linha; a prova mora lá em cima.
 
-A partir daqui **a `main` é protegida**: nada entra sem PR com os quatro checks verdes. O fluxo de todo item passa a ser branch → PR → gate verde → merge.
+### O ritual de cada item (não muda)
 
-Lembrete que não muda: **nada disso toca o projeto hospedado.** Ele segue sem migration aplicada até o B-5 (ambiente de staging) estar decidido.
+- [ ] Branch a partir da `main` atualizada (o ruleset é `strict`)
+- [ ] Teste escrito **primeiro** e visto **vermelho pelo motivo certo** — falha por privilégio ou rota ausente não é prova (decisão 16)
+- [ ] Implementar até o verde, sem escrever nada que nenhum teste exija
+- [ ] `ruff check` · `lint-imports` · `pytest` do nível tocado — ou `lint`/`typecheck`/`build` + `pnpm e2e` no hub
+- [ ] Mexeu em pixel: `update-baselines` **no runner** com `mode=all` (decisão 40), `gh run download`, commit local (decisão 34)
+- [ ] **Revisar a imagem da baseline**, nos dois temas — duas vezes seguidas ela achou defeito que teste objetivo nenhum pegaria (decisões 41 e 45)
+- [ ] PR → 4 checks verdes → merge → atualizar este arquivo (estado, prova e decisões novas)
+
+### Concluído
+
+- [x] **Ambiente da máquina** — WSL reinstalado, Docker de pé, `uv`/`pnpm`/`supabase` instalados (tabela abaixo)
+- [x] **Trilha T1** — E0-01 a E0-05, esqueleto do monorepo (`eacddb3`)
+- [x] **Trilha T2** — E0-06 a E0-12: relógio injetável, migration 0001 + `rls`, pgmq real, jornada E2E, `pr.yml`, `main.yml`, provas N1/N2/N4, `main` protegida por ruleset
+- [x] **Trilha T3, 7 de 9** — E0-13 tokens · E0-14 vidro · E0-16 vitrine · E0-17 harness visual · E0-15 L1 · E0-15 L2 · E0-15 L4
+
+### A fazer — Trilha T3 (caminho crítico)
+
+- [ ] **E0-15 L3 · navegação e dados** — sidebar agrupada 242px, topbar, tab bar de vidro do mobile (4 destinos), tabela de dados, paginação
+  - [ ] tab bar só abaixo do breakpoint, alvo de toque ≥ 44px afirmado
+  - [ ] tab bar é vidro `chrome` — confirmar que não empilha sobre outro vidro
+  - [ ] baselines novas no runner; as dos lotes anteriores **inalteradas**
+- [ ] **E0-18 · prova negativa N3** — alterar o padding de um botão em PR descartável e ver a regressão visual reprovar **nos dois viewports**; registrar PR/run/job na tabela do §E0-12 do plano
+
+### A fazer — Trilha T4 (bloqueada nos pré-requisitos do Bruno)
+
+- [ ] **B-4 · disparar o gap-check agora** — verificação Meta **incluindo Embedded Signup**, números de teste, webhooks das lojas dev nas 3 plataformas, instância Evolution. Não bloqueia o E0, mas é o maior risco de calendário do projeto
+- [ ] **B-1** VPS de staging · **B-2** Logfire + write token · **B-3** Grafana Cloud (OTLP, instance ID, token, IRM) · **B-5** ambiente Supabase de staging (recomendação: segundo projeto)
+- [ ] **E0-19** compose runtime + Alloy, credenciais só por `sys.env()`, redação de PII já no processor
+- [ ] **E0-20** módulo `obs/`; teste que reprova sem `service.name` / `deployment.environment`
+- [ ] **E0-21** mesmo `trace_id` no Logfire **e** no Tempo
+- [ ] **E0-22** primeiro segredo no padrão ADR-11 + teste `db` dos dois sentidos (executável por um role, negada ao outro)
+- [ ] **E0-23** deploy de staging: migrations → edge functions → runtime (desligamento gracioso) → fumaça
+
+### Placar das oito provas do §12 — 5 de 8
+
+| # | Prova | Estado |
+|---|---|---|
+| 1 | Um teste de cada nível verde no CI (`unit`, `db`, `rls`, `pipeline`, E2E) | ✅ E0-11 |
+| 2 | Componente na regressão visual, desktop **e** mobile | ✅ E0-17 |
+| 3 | Mesmo `trace_id` no Logfire e no Grafana Cloud | ⬜ E0-21 (bloqueada em B-2/B-3) |
+| 4 | Gates bloqueantes como checks obrigatórios antes da primeira feature | ✅ E0-10 |
+| 5 | N1 — quebra de fronteira de módulo reprova | ✅ |
+| 6 | N2 — SQL fora da camada de repositório reprova | ✅ |
+| 7 | N3 — alteração de componente reprova a regressão nos 2 viewports | ⬜ E0-18 |
+| 8 | N4 — leitura cross-tenant reprova a suíte `rls` | ✅ |
+
+### Antes dos próximos marcos
+
+- [ ] **Antes do E1** — as duas cobranças anotadas no E0-08 (revoke por fila nova; `archive()` vira sinal na dedup), listadas no fim deste arquivo. O E1 abre escrevendo **primeiro** as suítes A1/A2 de DB e os cenários 1–10 de pipeline
+- [ ] **Antes do E2** — definir o LLM do agente
+- [ ] **Antes do E4** — escrever `core/formulario-perguntas.md` (é citado no `CLAUDE.md` e não existe); atualizar `core/telas-da-aplicacao.md` para o design; decidir o mobile (recomendação: frames só do wizard, inbox e dashboard)
+- [ ] **Antes do E5** — fechar a receita light do vidro para `chrome`/`overlay`, os valores light que faltam (decisão 45) e o ghost de marca
+
+Duas regras que não mudam: **a `main` é protegida** — nada entra sem PR com os quatro checks verdes, o fluxo é branch → PR → gate verde → merge; e **nada disso toca o projeto hospedado**, que segue sem migration aplicada até o B-5 estar decidido.
 
 ---
 
@@ -161,6 +214,11 @@ Ficam registradas aqui porque mudam como o código se comporta:
 43. **Alert e Toast diferem por papel, não por estilo.** `role="alert"` interrompe o leitor de tela; `role="status"` espera a vez. É a diferença entre "seu número caiu" e "salvo". O toast é `<Glass level="overlay">` com raio e sombra próprios (o design desenha 16 e um lance mais curto que o de um modal) — composto, não redesenhado, para continuar sob a regra de que vidro não empilha.
 44. **O estado vazio ganhou um slot de ação opcional que o design não desenha.** O desenho da seção 11 tem título e descrição e nada mais; `core/telas-da-aplicacao.md` §D3 pede "vazio com orientação". O slot é opcional e recebe o Button do L1 — estado vazio nunca cria botão próprio. Se a orientação virar regra, é o design que ganha o desenho.
 45. **A revisão da baseline light do L2 pegou ilegibilidade generalizada** — "ativo", "em aprovação", o título do toast e o estado vazio inteiro apareciam como fantasmas. Causa: a paleta dark põe texto claro sobre tint escuro, e na superfície light o mesmo texto some. Conserto: light mantém **tint e ponto** como canal semântico e escurece o texto, transcrevendo o que o design desenha (a pílula ativa da seção 12 é exatamente `#9A3412` sobre `rgba(249,115,22,0.12)`) e caindo para `--color-fg`/`--color-fg-muted` onde ele não desenha — nunca para um amarelo ou verde escuro inventado. **Duas vezes seguidas a revisão de imagem achou um defeito que nenhum teste objetivo pegaria**; ela é etapa, não formalidade.
+
+46. **`GlassBoundary` é a única saída legítima da regra do vidro.** Toda sobreposição a usa: modal, popover e menu abrem *fora* do que os originou, e o `backdrop-filter` deles amostra a página, não o card. O contexto do React não sabe disso — atravessa portal e top layer igual —, então sem o reset o painel se declara aninhado e entrega o blur. Componente que alcança o `GlassBoundary` sem ser sobreposição está contornando a regra, não aplicando. As **duas metades ficam lado a lado na vitrine**, dentro do mesmo card: testar só uma aceitaria como conserto "desligar a regra".
+47. **O modal é o `<dialog>` nativo com `showModal()`** — focus trap, Esc e top layer vêm de graça, e o ônus da prova é de quem quer a dependência. A modalidade é afirmada pelo **`::backdrop`**, que só é renderizado quando aberto modalmente; um `aria-modal="true"` escrito à mão provaria apenas que alguém o digitou.
+48. **Dois falsos positivos na trava de cor, ambos consertados com o teste vendo antes.** (a) Ela flagrava `backdrop-filter` escrito num **comentário** — mesma lição dos detectores do E0-06: prosa não é violação, e flagrar comentário ensina a parar de comentar. (b) Flagrava `#4821`, número de pedido na copy, porque quatro dígitos hex são quatro dígitos hex. Em TS a cor passou a exigir contexto de cor (aspas, parêntese ou dois-pontos); em CSS a forma nua continua valendo, senão `border: 1px solid #fff` escaparia.
+49. **A ilegibilidade do light é sistêmica, não incidental.** Três lotes seguidos, mesma causa: a paleta dark é branco-sobre-escuro do começo ao fim, e cada componente novo herda isso. A regra que fica: **conferir o tema light antes de gerar baseline é etapa obrigatória de todo lote** — e o conserto é sempre superfície recuada aprovada + texto escuro o bastante, nunca matiz inventado. A causa raiz continua sendo a pendência de design: a seção 12 desenha light para um punhado de componentes.
 
 ---
 
