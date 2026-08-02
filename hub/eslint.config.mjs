@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The build directory of the second E2E server — the one started without
+    // the design-showcase flag to prove production answers 404 (E0-14). Same
+    // reason `.next` is ignored: generated output is not source.
+    ".next-production-check/**",
   ]),
 ]);
 

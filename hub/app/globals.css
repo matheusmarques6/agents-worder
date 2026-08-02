@@ -6,7 +6,7 @@
  * in Claude Design, sections 01–04. That file is the contract; this one is its
  * only representation in code. A screen that needs a value not in this file
  * needs a decision in the design first, not a hex in a component — which is
- * what `scripts/no-loose-hex.mjs` enforces.
+ * what `scripts/no-loose-colour.mjs` enforces.
  *
  * Names are by ROLE, not by scale, wherever the design speaks in roles ("12
  * botões e nav", "18–22 cards e overlays"). `radius-control` survives a
@@ -71,13 +71,39 @@
   --text-label--letter-spacing: 0.14em;
 
   /* --- 03 · Liquid Glass ---------------------------------------------------
-   * Only the blurs. The surfaces, borders and inner highlights of the three
-   * levels arrive with the primitive in E0-14, where there is something to
-   * assert them against.
+   * Three levels, each a full recipe: blur, a translucent gradient surface, a
+   * light border and an inner highlight along the top edge. Always all four —
+   * the border and the highlight are what read as an edge; without them the
+   * blur alone looks like a smudge.
    */
   --blur-chrome: 28px;
   --blur-card: 24px;
   --blur-overlay: 40px;
+
+  /* Nível 1 · chrome — sidebar and topbar. */
+  --color-glass-chrome-from: rgba(255, 255, 255, 0.075);
+  --color-glass-chrome-to: rgba(255, 255, 255, 0.03);
+  --color-glass-chrome-border: rgba(255, 255, 255, 0.10);
+  --shadow-glass-chrome: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 24px 48px -24px rgba(0, 0, 0, 0.8);
+
+  /* Nível 2 · card — cards, panels and tables. The most used one. */
+  --color-glass-card-from: rgba(255, 255, 255, 0.06);
+  --color-glass-card-to: rgba(255, 255, 255, 0.022);
+  --color-glass-card-border: rgba(255, 255, 255, 0.09);
+  --shadow-glass-card: inset 0 1px 0 rgba(255, 255, 255, 0.13);
+
+  /* Nível 3 · overlay — modals, popovers, menus and toasts. */
+  --color-glass-overlay-from: rgba(255, 255, 255, 0.10);
+  --color-glass-overlay-to: rgba(255, 255, 255, 0.045);
+  --color-glass-overlay-border: rgba(255, 255, 255, 0.15);
+  --shadow-glass-overlay: inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 40px 80px -30px rgba(0, 0, 0, 0.95);
+
+  /* What a glass becomes when it finds itself inside another one. The design's
+   * own value and its own words: "vira superfície sólida (rgba(255,255,255,.045),
+   * sem blur) para não virar leitosa". */
+  --color-glass-nested: rgba(255, 255, 255, 0.045);
 
   /* --- 04 · Raio -----------------------------------------------------------
    * 8 chips and small inputs · 12 buttons and nav · 18–22 cards and overlays ·
@@ -141,6 +167,93 @@
   --color-fg-muted: #5A5B62;
   --color-fg-subtle: #7A7B82;
   --color-fg-disabled: #A8A9AF;
+
+  /* Glass in light — "vidro branco sobre bege quente" (seção 12).
+   *
+   * The design gives this recipe for the CARD level only. Chrome and overlay
+   * have no light drawing, so they reuse the card's approved surface and keep
+   * their own blur and radius — a reuse, not an invented colour, and recorded
+   * as a design pendency to close before E5 builds the hub shell. */
+  --color-glass-card-from: rgba(255, 255, 255, 0.88);
+  --color-glass-card-to: rgba(255, 255, 255, 0.65);
+  --color-glass-card-border: rgba(255, 255, 255, 0.9);
+  --shadow-glass-card: inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 12px 28px -24px rgba(60, 40, 20, 0.5);
+
+  --color-glass-chrome-from: rgba(255, 255, 255, 0.88);
+  --color-glass-chrome-to: rgba(255, 255, 255, 0.65);
+  --color-glass-chrome-border: rgba(255, 255, 255, 0.9);
+  --shadow-glass-chrome: inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 12px 28px -24px rgba(60, 40, 20, 0.5);
+
+  --color-glass-overlay-from: rgba(255, 255, 255, 0.88);
+  --color-glass-overlay-to: rgba(255, 255, 255, 0.65);
+  --color-glass-overlay-border: rgba(255, 255, 255, 0.9);
+  --shadow-glass-overlay: inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 12px 28px -24px rgba(60, 40, 20, 0.5);
+
+  /* White at 4.5% is invisible on a white-ish glass. This is the recessed
+   * surface the design already uses on light glass (the incoming chat bubble,
+   * seção 12) — same pendency as above. */
+  --color-glass-nested: rgba(23, 24, 28, 0.05);
+}
+
+/* --- The glass itself ---------------------------------------------------
+ *
+ * Styled by attribute rather than by class so the component stays structure
+ * only: colour lives here, in the one file allowed to hold it, and
+ * `components/glass.tsx` decides nothing but which level applies and whether
+ * this one is nested.
+ */
+[data-glass] {
+  border-width: 1px;
+  border-style: solid;
+}
+
+[data-glass="chrome"] {
+  border-radius: var(--radius-chrome);
+  border-color: var(--color-glass-chrome-border);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-glass-chrome-from),
+    var(--color-glass-chrome-to)
+  );
+  backdrop-filter: blur(var(--blur-chrome));
+  box-shadow: var(--shadow-glass-chrome);
+}
+
+[data-glass="card"] {
+  border-radius: var(--radius-card);
+  border-color: var(--color-glass-card-border);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-glass-card-from),
+    var(--color-glass-card-to)
+  );
+  backdrop-filter: blur(var(--blur-card));
+  box-shadow: var(--shadow-glass-card);
+}
+
+[data-glass="overlay"] {
+  border-radius: var(--radius-overlay);
+  border-color: var(--color-glass-overlay-border);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-glass-overlay-from),
+    var(--color-glass-overlay-to)
+  );
+  backdrop-filter: blur(var(--blur-overlay));
+  box-shadow: var(--shadow-glass-overlay);
+}
+
+/* Glass stacks exactly once. The second layer keeps its shape and its border
+ * and gives up everything that makes it glass — two blurs on top of each other
+ * is the "leitosa" the design forbids. */
+[data-glass][data-nested] {
+  background-image: none;
+  background-color: var(--color-glass-nested);
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
 body {

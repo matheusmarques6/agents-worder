@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint && node scripts/no-loose-hex.mjs",
+    "lint": "eslint && node scripts/no-loose-colour.mjs",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test"
   },

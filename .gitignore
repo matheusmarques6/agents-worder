@@ -45,3 +45,6 @@ desktop.ini
 # --- Claude Code (local overrides only; project settings are committed) ---
 .claude/settings.local.json
 .claude/*.local.json
+
+# Second Next build directory — the E2E production-behaviour server (E0-14).
+.next-production-check/
