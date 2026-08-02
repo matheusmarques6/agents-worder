@@ -130,7 +130,8 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [ ] **Antes do E1** — as duas cobranças anotadas no E0-08 (revoke por fila nova; `archive()` vira sinal na dedup), listadas no fim deste arquivo. O E1 abre escrevendo **primeiro** as suítes A1/A2 de DB e os cenários 1–10 de pipeline
 - [ ] **Antes do E2** — definir o LLM do agente
 - [ ] **Antes do E4** — escrever `core/formulario-perguntas.md` (é citado no `CLAUDE.md` e não existe); atualizar `core/telas-da-aplicacao.md` para o design; decidir o mobile (recomendação: frames só do wizard, inbox e dashboard)
-- [ ] **Antes do E5** — fechar a receita light do vidro para `chrome`/`overlay`, os valores light que faltam (decisão 45) e o ghost de marca
+- [ ] **Antes do E5** — fechar a receita light do vidro para `chrome`/`overlay`, os valores light que faltam (decisão 45) e o ghost de marca. O peso disso mudou de recomendação para condição: **os quatro lotes do E0-15 tiveram defeito de light pego só na revisão de imagem** (L1 contraste do erro · L2 ilegibilidade generalizada · L4 conversa e menu · L3 navegação e tabela) — o dark foi desenhado, o light está sendo derivado na implementação, e cada derivação errada custa um ciclo inteiro de recaptura. Completar a seção 12 no Claude Design e reconciliar os tokens light contra ela **antes** de o E5 abrir as 19 telas do hub
+- [ ] **Antes do dashboard do E5** — os componentes da seção 09 que ficaram fora do L3 por escopo declarado (PR #14): **KPI, sparkline e barra de progresso**. O dashboard (B1) consome os três; sem este registro o corte só existia no corpo do PR
 
 Duas regras que não mudam: **a `main` é protegida** — nada entra sem PR com os quatro checks verdes, o fluxo é branch → PR → gate verde → merge; e **nada disso toca o projeto hospedado**, que segue sem migration aplicada até o B-5 estar decidido.
 
