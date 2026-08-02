@@ -139,6 +139,46 @@ const SPACE = {
   "--spacing-reading": "680px",
 };
 
+// 05 · 06 — the controls. Dimensions only: the colour of each variant is
+// asserted where it can be seen, in controls.spec.ts and in the baseline. What
+// matters here is that the NAMES survive, because a screen in E4 that says
+// `size="lg"` is trusting these to still mean 48px.
+const CONTROL = {
+  "--spacing-control-sm": "30px",
+  "--spacing-control-md": "38px",
+  "--spacing-control-lg": "48px",
+  "--radius-control-sm": "9px",
+  "--radius-control-lg": "14px",
+  "--text-control-sm": "12px",
+  "--text-control-md": "13px",
+  "--text-control-lg": "14.5px",
+  "--radius-choice": "13px",
+  "--spacing-toggle-track-w": "44px",
+  "--spacing-toggle-track-h": "26px",
+  "--spacing-toggle-knob": "20px",
+  "--spacing-spinner": "11px",
+  "--text-field": "13.5px",
+  "--text-field-label": "12.5px",
+  "--text-field-help": "11.5px",
+  "--spacing-textarea": "58px",
+};
+
+// 07 — status and feedback. The five status borders are here because they are
+// what makes two states distinguishable at a glance; feedback.spec.ts asserts
+// that no two of them are equal, and this asserts what each one is.
+const FEEDBACK = {
+  "--radius-badge": "5px",
+  "--radius-skeleton": "6px",
+  "--radius-feedback": "16px",
+  "--text-badge": "11.5px",
+  "--text-tech": "10.5px",
+  "--color-status-active-border": "rgba(249, 115, 22, 0.30)",
+  "--color-status-paused-border": "rgba(255, 255, 255, 0.12)",
+  "--color-status-pending-border": "rgba(250, 204, 21, 0.26)",
+  "--color-status-shadow-border": "rgba(249, 115, 22, 0.5)",
+  "--color-status-cancelled-border": "rgba(244, 63, 94, 0.28)",
+};
+
 // The design defines mobile as BELOW 860px; Tailwind breakpoints are
 // min-width, so the token is the desktop side of that same line. It was in the
 // stylesheet from E0-13 but outside this contract, which meant renaming it
@@ -189,6 +229,14 @@ test.describe("design tokens", () => {
 
   test("exposes the surface of each glass level and the nested fallback", async ({ page }) => {
     await expectTokens(page, GLASS);
+  });
+
+  test("exposes the dimensions every control is built from", async ({ page }) => {
+    await expectTokens(page, CONTROL);
+  });
+
+  test("exposes the feedback tokens, including a distinct border per status", async ({ page }) => {
+    await expectTokens(page, FEEDBACK);
   });
 
   test("exposes the desktop breakpoint", async ({ page }) => {

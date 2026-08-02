@@ -32,6 +32,7 @@ const SECTIONS = [
   { id: "03", name: "liquid-glass" },
   { id: "05", name: "botoes" },
   { id: "06", name: "campos-e-controles" },
+  { id: "07", name: "status-e-feedback" },
 ];
 
 test.describe("visual regression", () => {
