@@ -119,6 +119,7 @@ Ficam registradas aqui porque mudam como o código se comporta:
 22. **Isolamento do nível `pipeline` é por purga, não por prefixo.** Fila é estado compartilhado, não linha: cada teste começa e termina com `q_inbound` vazia. O prefixo por run que o nível `db` usa não se aplica.
 23. **`psycopg` virou dependência de produção** (era só de desenvolvimento). A imagem instala com `--no-dev`; sem a mudança, o container subiria sem o driver que o laço agora importa.
 24. **Windows precisa do selector loop** para as conexões assíncronas do psycopg. O `tests/pipeline/conftest.py` implementa o hook `pytest_asyncio_loop_factories` (a API antiga, `event_loop_policy`, está deprecada no pytest-asyncio 1.x) e só na máquina de desenvolvimento — em Linux o selector já é o padrão.
+25. **Revisão do E0-08 fechou dois achados.** (a) O contrato "só a camada de repositório alcança o banco" listava nove módulos e **não** listava `queueing` — que acabara de ganhar código. O furo foi confirmado antes do conserto: com `import agents_runtime.repository.driver` plantado no `loop.py`, o `lint-imports` respondia "3 kept, 0 broken". Com `agents_runtime.queueing` na lista, o mesmo import reprova nomeando arquivo e linha. `agents_runtime.app` fica **fora** da lista de propósito: a raiz de composição é quem constrói os pools e os entrega aos outros. (b) O `revoke all on all functions in schema pgmq` saiu: as funções do pgmq têm EXECUTE via PUBLIC e rodam como quem chama, então revogar dos três roles nomeados não removia nada e só parecia proteção. A fronteira real é o privilégio de **tabela** — que é o que a sabotagem provou e o que a suíte segura. A migration 0002 foi editada no lugar (nada implantado em lugar nenhum, mesma lógica das decisões 13 e 15).
 
 ---
 
@@ -128,3 +129,8 @@ Do plano (§9 e §11), nenhuma resolvida ainda:
 
 - **B-1** VPS de staging · **B-2** conta Logfire · **B-3** conta Grafana Cloud · **B-4** gap-check Meta/lojas/Evolution · **B-5** decidir o ambiente Supabase de staging (recomendação: segundo projeto).
 - Telas sem layout mobile; divergências entre o design e `core/telas-da-aplicacao.md`; `core/formulario-perguntas.md` inexistente; LLM do agente indefinido.
+
+Anotadas no E0-08 para serem cobradas no **E1**:
+
+- **Cada fila nova repete a disciplina de revoke** — os `revoke` da migration 0002 valem só para os objetos que existiam quando ela rodou. `q_domain_events`, `q_scheduled`, `q_evals` e os DLQs entram cada um com o seu revoke **e o seu teste**, no mesmo PR que os cria.
+- **O retorno de `archive()` vira sinal.** Hoje é descartado, e com um consumidor só isso é correto. Quando a dedup de jobs existir, `False` significa "outro consumidor já terminou este job" — que é exatamente o que a dedup precisa observar, não ignorar.

@@ -10,6 +10,11 @@ message is next — to any logged-in merchant, for every tenant at once.
 `worker_role` is asserted from the other side on purpose: a suite that only
 proves denial would also pass with the queue granted to nobody, which is the
 same as a queue that does not work.
+
+Note where the denial comes from: pgmq's functions carry EXECUTE through
+PUBLIC and run as their caller, so a Data API role is stopped by the privilege
+on the queue TABLE, not by the right to call `pgmq.send`. That is the boundary
+worth testing, because it is the one a stray GRANT can open.
 """
 
 import psycopg

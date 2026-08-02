@@ -62,4 +62,10 @@ class RuntimeLoop:
             # message is claimed, archiving it is the only way this loop is
             # allowed to let go of it.
             await self._handle(message)
+
+            # The return value is dropped on purpose while there is exactly one
+            # consumer: False can only mean "already archived", which nobody
+            # else is in a position to have done. It stops being noise in E1 —
+            # with job dedup and a second consumer, False is the evidence that
+            # this loop worked on something someone else had already finished.
             await self._queue.archive(message.id)

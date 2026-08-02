@@ -40,6 +40,15 @@ grant usage, select on all sequences in schema pgmq to worker_role;
 -- Explicit, not inherited: the extension's defaults are not this project's
 -- promise, and a future `grant ... to authenticated` written by habit would
 -- otherwise hand every queued job to any logged-in merchant.
+--
+-- The privilege that actually bites is the one on the TABLE. pgmq's functions
+-- carry EXECUTE through PUBLIC and run as their caller, so `pgmq.send` from a
+-- Data API role fails on the INSERT, not on the call — revoking EXECUTE from
+-- these three roles by name would not remove PUBLIC's grant and would only
+-- read as protection that is not there. The `db` suite asserts the denial that
+-- exists, from both roles' point of view.
+--
+-- These statements cover the objects that exist right now. Every queue added
+-- in E1 repeats this discipline in its own migration, with its own test.
 revoke all on schema pgmq from anon, authenticated, service_role;
 revoke all on all tables in schema pgmq from anon, authenticated, service_role;
-revoke all on all functions in schema pgmq from anon, authenticated, service_role;

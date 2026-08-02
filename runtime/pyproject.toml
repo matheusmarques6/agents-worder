@@ -96,6 +96,9 @@ forbidden_modules = ["agents_runtime.channels"]
 [[tool.importlinter.contracts]]
 name = "only the repository layer reaches the database"
 type = "forbidden"
+# `agents_runtime.app` is deliberately absent: the composition root is where the
+# pools are built and handed to everyone else, so it is the one module that has
+# to know the driver exists. Every module that receives them is listed here.
 source_modules = [
     "agents_runtime.agent_core",
     "agents_runtime.channels",
@@ -104,6 +107,7 @@ source_modules = [
     "agents_runtime.inbox",
     "agents_runtime.judges",
     "agents_runtime.onboarding",
+    "agents_runtime.queueing",
     "agents_runtime.quota",
     "agents_runtime.tools",
 ]
