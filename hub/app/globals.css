@@ -802,7 +802,8 @@ body {
 }
 [data-button][data-size="md"] {
   min-height: var(--spacing-control-md);
-  padding-inline: var(--spacing-card);
+  /* SABOTAGE N3 — padding do botão alterado de 18px para 30px. */
+  padding-inline: var(--spacing-section);
   border-radius: var(--radius-control);
   font-size: var(--text-control-md);
 }
