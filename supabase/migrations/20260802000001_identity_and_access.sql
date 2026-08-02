@@ -223,3 +223,9 @@ create policy memberships_worker_scoped on public.memberships
 create policy memberships_sender_read on public.memberships
     for select to sender_role
     using (tenant_id = public.current_app_tenant_id());
+
+-- SABOTAGE N4 (plano §E0-12) — desligar RLS em memberships.
+-- Desligar é o que produz vazamento de verdade: remover a policy faria a
+-- tabela fechar (nenhuma linha), que reprova por privilégio ausente e não
+-- por vazamento — e privilégio ausente não é prova de RLS (decisão 16).
+alter table public.memberships disable row level security;
