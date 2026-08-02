@@ -24,6 +24,7 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 |---|---|---|
 | E0-06 relógio injetável + fitness | ✅ commit `8771f6f` | `pytest -m unit` 46 verdes · cada trava vista **vermelha** primeiro, contra sabotagem plantada em `dispatch` (relógio) e em `inbox` (SQL) · `ruff check` e `lint-imports` verdes |
 | E0-09 primeira jornada E2E | ✅ commit `c06d122` | `pnpm e2e` 6 verdes (3 asserções × 2 projects) · vista **vermelha** primeiro nos dois viewports · `lint`, `typecheck` e `build` do hub exit 0 |
+| E0-07 migration 0001 + suíte `rls` | ✅ commit `cc6406a` | `pytest -m "unit or db"` 70 verdes · vazamento visto **vermelho** com as três credenciais · N4 confirmada no gate final (desligar RLS só em `memberships` reprova 10 dos 24) · **R2 fechado**: imagem local traz `pgmq` 1.5.1 e `vector` 0.8.2 |
 
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
 
@@ -62,11 +63,12 @@ Depois disso o Docker Desktop ainda não subia, por dois motivos independentes:
 
 ## A retomada, em ordem
 
-1. **`supabase start`** (na raiz do repo) — primeira execução baixa as imagens, demora. É aqui que se fecha o risco R2 do plano: confirmar que a imagem local traz **pgmq** e **pgvector**. Se não trouxer, vale o plano B do E0-04 (serviço Postgres próprio no CI com as extensões).
-2. **E0-07** — migration `0001` (`tenants`, `profiles`, `memberships` conforme `core/dicionario-de-dados.md` §1.1–1.3), roles `worker_role`/`sender_role` sem BYPASSRLS, políticas RLS nos três caminhos. O teste de vazamento é escrito **antes** da policy, para vazar de verdade e só então fechar. **Não aplicar no projeto hospedado** — ele é o único que existe e o B-5 (ambiente de staging) segue indefinido.
-3. **E0-08** — pgmq real (`send` → `read(vt)` → `archive`) + esqueleto do laço do runtime.
-4. **E0-10/E0-11** — `pr.yml` e `main.yml`. Precisa de push (ver decisão 11).
-5. **E0-12** — as quatro provas negativas (a N1 e a N2 já têm mecanismo pronto e visto reprovando localmente; falta o registro em PR descartável).
+1. **E0-08** — pgmq real (`send` → `read(vt)` → `archive`) + esqueleto do laço do runtime, desligando graciosamente sem deixar mensagem em limbo. É o nível `pipeline`, ainda sem nenhum teste.
+2. **E0-10/E0-11** — `pr.yml` e `main.yml`. Precisa de push (ver decisão 11).
+3. **E0-12** — registrar as quatro provas negativas em PR descartável. As quatro já foram vistas reprovando **localmente** (N1 pelo import-linter, N2 e a do relógio no `-m unit`, N4 no `-m rls`); falta só a N3, que depende da trilha T3, e o registro formal com link de run.
+4. **Trilha T3** (E0-13 tokens → E0-18) — destravada desde o E0-09.
+
+Lembrete que não muda: **nada disso toca o projeto hospedado.** Ele segue sem migration aplicada até o B-5 (ambiente de staging) estar decidido.
 
 ---
 
@@ -101,7 +103,11 @@ Ficam registradas aqui porque mudam como o código se comporta:
 8. **`FrozenClock` mora em `runtime/tests/support/`, não no pacote do runtime.** Duplo de teste não viaja na imagem de produção. O `agents_runtime/clock.py` é o único arquivo autorizado a ler o relógio real — é assim que a trava está escrita.
 9. **`runtime/tests/` virou pacote** (`__init__.py` em `tests/`, `tests/unit/`, `tests/support/`). Sem isso, `tests.support` não importa e dois arquivos de teste com o mesmo nome em níveis diferentes colidiriam.
 10. **A home do hub é placeholder deliberado.** O E0 não entrega tela desenhada; a jornada do E0-09 afirma só `data-testid="hub-home"`, título, `lang` e ausência de rolagem horizontal — marcadores escolhidos para sobreviver à reconstrução da página sobre o design system na T3, sem editar o teste. Os assets do `create-next-app` foram removidos junto.
-11. **Nada foi empurrado para o GitHub ainda.** Os três commits vivem só na `e0-foundation` local. O `pr.yml` só pode ser verificado depois de um push — decisão do Bruno.
+11. **Nada foi empurrado para o GitHub ainda.** Os commits vivem só na `e0-foundation` local. O `pr.yml` só pode ser verificado depois de um push — decisão do Bruno.
+12. **A stack local sobe enxuta.** `supabase start -x "..."` com 12 dos 14 containers excluídos — sobram Postgres e GoTrue, que é tudo que as suítes `db`/`rls` tocam. O GoTrue fica porque `profiles.user_id` e `memberships.user_id` referenciam `auth.users`. Comando completo na seção Commands do `CLAUDE.md`. **A lista precisa de aspas:** o PowerShell interpreta valor separado por vírgula como array e passa só o primeiro nome, silenciosamente.
+13. **As policies vão na mesma migration das tabelas**, não numa migration seguinte. Tabela que existe por uma migration que seja com GRANT e sem policy foi legível cross-tenant em algum ponto da história do schema. O ciclo vermelho→verde aconteceu de verdade — a suíte rodou contra as tabelas com GRANT e sem policy e foi vista retornando linhas do tenant errado —, mas a prova mora na mensagem do commit `cc6406a`, não numa migration permanentemente insegura.
+14. **Roles `nologin`.** Pool separado exige senha, e senha em migration commitada é segredo vazado; o grant de login fica fora de banda, por ambiente. `grant worker_role, sender_role to postgres` existe para o `postgres` conseguir assumi-los (`SET ROLE`) — não concede nada aos roles.
+15. **O primeiro vermelho do E0-07 foi rejeitado.** 11 das 16 falhas eram `permission denied to set role` e `permission denied for table` — isso testa o GRANT, não a policy. Só depois de conceder privilégio de tabela aos três caminhos o vazamento pôde acontecer de fato. Vale a regra geral: **falha por privilégio ausente não é prova de RLS.**
 
 ---
 
