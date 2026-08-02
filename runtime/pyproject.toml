@@ -12,6 +12,11 @@ dev = [
     "freezegun>=1.5",
     "ruff>=0.14",
     "import-linter>=2.3",
+    # The `db`/`rls` levels talk to a real Postgres. psycopg3 is also what
+    # `obs` will instrument later (observabilidade §3, instrument_psycopg), so
+    # the test harness and the runtime speak to the database through the same
+    # driver rather than two.
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]
