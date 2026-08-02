@@ -71,7 +71,15 @@ jobs:
       # compare. Everything else — viewports, threshold, reduced motion, the
       # pinned fonts — comes from playwright.config.ts, so what is written here
       # is what tests-hub will read.
+      #
+      # A non-zero exit is EXPECTED here: Playwright fails the run whenever it
+      # writes a snapshot that did not exist, precisely so that a gate can
+      # never accept a new pixel in silence. That is this workflow's whole
+      # purpose, so the exit code is not the signal — the artifact is, and
+      # `if-no-files-found: error` below is what actually fails the job when
+      # nothing was captured.
       - name: Capture
+        continue-on-error: true
         run: pnpm --dir hub exec playwright test --update-snapshots=${{ inputs.mode }}
 
       - name: Show what changed
