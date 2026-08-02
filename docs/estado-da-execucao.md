@@ -39,6 +39,7 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-17 harness de regressão visual | ✅ PRs [#9](https://github.com/matheusmarques6/agents-worder/pull/9) e [#10](https://github.com/matheusmarques6/agents-worder/pull/10) | ciclo inteiro executado **no CI**: gate vermelho por baseline ausente (4 PNGs, `A snapshot doesn't exist`) → `update-baselines` no runner ([30753971421](https://github.com/matheusmarques6/agents-worder/actions/runs/30753971421)) → artefato commitado → gate verde. Nenhuma baseline saiu desta máquina |
 | E0-15 · L1 ação e entrada | ✅ PR [#11](https://github.com/matheusmarques6/agents-worder/pull/11) | 12 asserções objetivas vistas **vermelhas** primeiro (altura e raio por tamanho, lg ≥ 44, disabled/loading reais, erro anunciado, foco visível, switch, escolha exclusiva, chips acumulando) · 8 baselines novas geradas no runner · as 4 do vidro **inalteradas**, o que prova que o lote não vazou para o 03 |
 | E0-15 · L2 status e feedback | ✅ PR [#12](https://github.com/matheusmarques6/agents-worder/pull/12) | 13 asserções vistas **vermelhas** primeiro · nenhum par de status compartilha cor e todo status escreve o estado por extenso · duas composições entre lotes (toast = `<Glass level="overlay">`, estado vazio consome o Button do L1) · a revisão da baseline light pegou ilegibilidade generalizada, corrigida antes do merge |
+| E0-15 · L4 conversa e sobreposição | ✅ PR [#13](https://github.com/matheusmarques6/agents-worder/pull/13) | 13 asserções vermelhas primeiro · **as duas metades da regra do vidro lado a lado no mesmo card**: modal e menu mantêm `blur(40px)`, vidro aninhado perde · modal é `<dialog>` nativo, modalidade provada pelo `::backdrop` · terceira ilegibilidade de light pega pela revisão de imagem |
 | E0-14 primitivo Glass | ✅ | 8 asserções de estilo computado × 2 viewports, vermelhas primeiro (rota e componente inexistentes) · trava estendida vista reprovando contra `rgba()` num componente e `backdrop-blur` fora do vidro · 404 da vitrine provado contra um **segundo servidor** sem a flag |
 
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
@@ -97,7 +98,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [x] **Ambiente da máquina** — WSL reinstalado, Docker de pé, `uv`/`pnpm`/`supabase` instalados (tabela abaixo)
 - [x] **Trilha T1** — E0-01 a E0-05, esqueleto do monorepo (`eacddb3`)
 - [x] **Trilha T2** — E0-06 a E0-12: relógio injetável, migration 0001 + `rls`, pgmq real, jornada E2E, `pr.yml`, `main.yml`, provas N1/N2/N4, `main` protegida por ruleset
-- [x] **Trilha T3, 6 de 9** — E0-13 tokens · E0-14 vidro · E0-16 vitrine · E0-17 harness visual · E0-15 L1 · E0-15 L2
+- [x] **Trilha T3, 7 de 9** — E0-13 tokens · E0-14 vidro · E0-16 vitrine · E0-17 harness visual · E0-15 L1 · E0-15 L2 · E0-15 L4
 
 ### A fazer — Trilha T3 (caminho crítico)
 
@@ -105,8 +106,6 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
   - [ ] tab bar só abaixo do breakpoint, alvo de toque ≥ 44px afirmado
   - [ ] tab bar é vidro `chrome` — confirmar que não empilha sobre outro vidro
   - [ ] baselines novas no runner; as dos lotes anteriores **inalteradas**
-- [ ] **E0-15 L4 · conversa e sobreposição** — balão (entrada/saída/status), composer, modal, popover, menu
-  - [ ] **resetar o contexto do vidro na fronteira do portal** (`InsideGlass.Provider value={false}`), com teste dedicado — pendência anotada desde o E0-14
 - [ ] **E0-18 · prova negativa N3** — alterar o padding de um botão em PR descartável e ver a regressão visual reprovar **nos dois viewports**; registrar PR/run/job na tabela do §E0-12 do plano
 
 ### A fazer — Trilha T4 (bloqueada nos pré-requisitos do Bruno)
@@ -215,6 +214,11 @@ Ficam registradas aqui porque mudam como o código se comporta:
 43. **Alert e Toast diferem por papel, não por estilo.** `role="alert"` interrompe o leitor de tela; `role="status"` espera a vez. É a diferença entre "seu número caiu" e "salvo". O toast é `<Glass level="overlay">` com raio e sombra próprios (o design desenha 16 e um lance mais curto que o de um modal) — composto, não redesenhado, para continuar sob a regra de que vidro não empilha.
 44. **O estado vazio ganhou um slot de ação opcional que o design não desenha.** O desenho da seção 11 tem título e descrição e nada mais; `core/telas-da-aplicacao.md` §D3 pede "vazio com orientação". O slot é opcional e recebe o Button do L1 — estado vazio nunca cria botão próprio. Se a orientação virar regra, é o design que ganha o desenho.
 45. **A revisão da baseline light do L2 pegou ilegibilidade generalizada** — "ativo", "em aprovação", o título do toast e o estado vazio inteiro apareciam como fantasmas. Causa: a paleta dark põe texto claro sobre tint escuro, e na superfície light o mesmo texto some. Conserto: light mantém **tint e ponto** como canal semântico e escurece o texto, transcrevendo o que o design desenha (a pílula ativa da seção 12 é exatamente `#9A3412` sobre `rgba(249,115,22,0.12)`) e caindo para `--color-fg`/`--color-fg-muted` onde ele não desenha — nunca para um amarelo ou verde escuro inventado. **Duas vezes seguidas a revisão de imagem achou um defeito que nenhum teste objetivo pegaria**; ela é etapa, não formalidade.
+
+46. **`GlassBoundary` é a única saída legítima da regra do vidro.** Toda sobreposição a usa: modal, popover e menu abrem *fora* do que os originou, e o `backdrop-filter` deles amostra a página, não o card. O contexto do React não sabe disso — atravessa portal e top layer igual —, então sem o reset o painel se declara aninhado e entrega o blur. Componente que alcança o `GlassBoundary` sem ser sobreposição está contornando a regra, não aplicando. As **duas metades ficam lado a lado na vitrine**, dentro do mesmo card: testar só uma aceitaria como conserto "desligar a regra".
+47. **O modal é o `<dialog>` nativo com `showModal()`** — focus trap, Esc e top layer vêm de graça, e o ônus da prova é de quem quer a dependência. A modalidade é afirmada pelo **`::backdrop`**, que só é renderizado quando aberto modalmente; um `aria-modal="true"` escrito à mão provaria apenas que alguém o digitou.
+48. **Dois falsos positivos na trava de cor, ambos consertados com o teste vendo antes.** (a) Ela flagrava `backdrop-filter` escrito num **comentário** — mesma lição dos detectores do E0-06: prosa não é violação, e flagrar comentário ensina a parar de comentar. (b) Flagrava `#4821`, número de pedido na copy, porque quatro dígitos hex são quatro dígitos hex. Em TS a cor passou a exigir contexto de cor (aspas, parêntese ou dois-pontos); em CSS a forma nua continua valendo, senão `border: 1px solid #fff` escaparia.
+49. **A ilegibilidade do light é sistêmica, não incidental.** Três lotes seguidos, mesma causa: a paleta dark é branco-sobre-escuro do começo ao fim, e cada componente novo herda isso. A regra que fica: **conferir o tema light antes de gerar baseline é etapa obrigatória de todo lote** — e o conserto é sempre superfície recuada aprovada + texto escuro o bastante, nunca matiz inventado. A causa raiz continua sendo a pendência de design: a seção 12 desenha light para um punhado de componentes.
 
 ---
 
