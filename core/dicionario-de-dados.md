@@ -142,6 +142,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | tenant_id | uuid FK | |
 | type | text CHECK | `cloud \| evolution` |
 | phone_e164 | text NOT NULL | UNIQUE (type, phone_e164) |
+| external_account_id | text NOT NULL | id da conta no provedor — `phone_number_id` na Cloud API, nome da instância na Evolution. **É a chave que resolve o tenant na ingestão de canal**, o equivalente do `source_account_id` do conector; UNIQUE (type, external_account_id) |
 | display_name | text | |
 | vault_secret_id | uuid | ref. no Vault — lida só via `get_channel_secret()` |
 | status | text CHECK | `connecting \| active \| paused \| banned \| error` |
@@ -285,7 +286,9 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 
 ## 5. Ingestão, filas e envio
 
-### 5.1 `webhook_events` **[interna]**
+> **Onde as tabelas [interna] moram.** Fora do schema exposto pela Data API (ADR-11) — e `public` **é** exposto, está na lista de `supabase/config.toml`. Por isso `webhook_events` e `message_outbox` vivem no schema **`internal`**, e as filas no schema `pgmq`. Assim a exposição fica impossível por construção em vez de depender de ninguém escrever um GRANT errado. Materializado na migration `20260802000003_steel_thread.sql`.
+
+### 5.1 `webhook_events` **[interna]** — schema `internal`
 | Atributo | Tipo | Regras / descrição |
 |---|---|---|
 | id | bigint IDENTITY PK | |
@@ -307,7 +310,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | q_evals | `{kind, conversation_id? , eval_run_id?}` | melhor esforço |
 | *_dlq (4) | mensagem original + `{error_class, last_error, failed_at}` | alerta + reprocesso manual |
 
-### 5.3 `message_outbox` **[interna]** — claim só via `claim_outbox_batch()`
+### 5.3 `message_outbox` **[interna]** — schema `internal`, claim só via `claim_outbox_batch()`
 | Atributo | Tipo | Regras / descrição |
 |---|---|---|
 | id | uuid PK | |
