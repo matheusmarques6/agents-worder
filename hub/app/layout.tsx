@@ -22,6 +22,11 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
+      // Dark is stated, not merely the absence of light. The stylesheet would
+      // work without this — light is what carries an attribute — but a theme
+      // you can only detect by what is missing is one nothing can toggle, and
+      // E5 has a user preference to store against it.
+      data-theme="dark"
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

@@ -35,6 +35,7 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | Item | Estado | Prova executada |
 |---|---|---|
 | E0-13 tokens | ✅ PR [#6](https://github.com/matheusmarques6/agents-worder/pull/6) | contrato de tokens visto **vermelho** primeiro (14 falhas nos 2 viewports) · trava de cor vista reprovando contra `#F97316` plantado na home · gate de CI verde |
+| E0-16 shell da vitrine | ✅ | 5 asserções × 2 viewports vistas **vermelhas** primeiro · as 13 seções do design na ordem, com testid estável · o interruptor de tema afirmado pela superfície computada do body (#08090C ↔ #F3F2F0), não pelo atributo |
 | E0-14 primitivo Glass | ✅ | 8 asserções de estilo computado × 2 viewports, vermelhas primeiro (rota e componente inexistentes) · trava estendida vista reprovando contra `rgba()` num componente e `backdrop-blur` fora do vidro · 404 da vitrine provado contra um **segundo servidor** sem a flag |
 
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
@@ -151,6 +152,7 @@ Do plano (§9 e §11), nenhuma resolvida ainda:
 
 - **B-1** VPS de staging · **B-2** conta Logfire · **B-3** conta Grafana Cloud · **B-4** gap-check Meta/lojas/Evolution · **B-5** decidir o ambiente Supabase de staging (recomendação: segundo projeto).
 - **Receita light do vidro para `chrome` e `overlay`** — a seção 12 do design só desenha o nível `card` (decisão 33). Fechar antes do E5.
+- **O lote L4 (conversa e sobreposição) precisa resetar o contexto do vidro na fronteira do portal.** A regra de aninhamento viaja por contexto React, o que é correto — inclusive através de server components. Mas um modal ou popover portalado abre *fora* do vidro que o originou e ainda assim herdaria o contexto: se declararia aninhado e perderia o blur indevidamente, sendo que visualmente não está empilhado em nada. O componente de sobreposição tem de envolver seu conteúdo em `InsideGlass.Provider value={false}` na fronteira do portal, com teste dedicado. Anotado no E0-14, para não depender de alguém lembrar no E0-15.
 - Telas sem layout mobile; divergências entre o design e `core/telas-da-aplicacao.md`; `core/formulario-perguntas.md` inexistente; LLM do agente indefinido.
 
 Anotadas no E0-08 para serem cobradas no **E1**:
