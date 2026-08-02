@@ -40,6 +40,8 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-15 · L1 ação e entrada | ✅ PR [#11](https://github.com/matheusmarques6/agents-worder/pull/11) | 12 asserções objetivas vistas **vermelhas** primeiro (altura e raio por tamanho, lg ≥ 44, disabled/loading reais, erro anunciado, foco visível, switch, escolha exclusiva, chips acumulando) · 8 baselines novas geradas no runner · as 4 do vidro **inalteradas**, o que prova que o lote não vazou para o 03 |
 | E0-15 · L2 status e feedback | ✅ PR [#12](https://github.com/matheusmarques6/agents-worder/pull/12) | 13 asserções vistas **vermelhas** primeiro · nenhum par de status compartilha cor e todo status escreve o estado por extenso · duas composições entre lotes (toast = `<Glass level="overlay">`, estado vazio consome o Button do L1) · a revisão da baseline light pegou ilegibilidade generalizada, corrigida antes do merge |
 | E0-15 · L4 conversa e sobreposição | ✅ PR [#13](https://github.com/matheusmarques6/agents-worder/pull/13) | 13 asserções vermelhas primeiro · **as duas metades da regra do vidro lado a lado no mesmo card**: modal e menu mantêm `blur(40px)`, vidro aninhado perde · modal é `<dialog>` nativo, modalidade provada pelo `::backdrop` · terceira ilegibilidade de light pega pela revisão de imagem |
+| E0-15 · L3 navegação e dados | ✅ PR [#14](https://github.com/matheusmarques6/agents-worder/pull/14) | 14 asserções vermelhas primeiro · **o breakpoint virou asserção**: desktop tem sidebar e não tem tab bar, mobile é o inverso exato · pendência do enum fechada (`pending_approval` → `onboarding`) |
+| E0-18 · prova N3 | ✅ PR [#15](https://github.com/matheusmarques6/agents-worder/pull/15) (fechado) | run [30760216787](https://github.com/matheusmarques6/agents-worder/actions/runs/30760216787): 4 falhas de `toHaveScreenshot` na seção 05, **nos dois viewports e nos dois temas**, e só o `tests-hub` reprovou · **fecha a tabela das quatro provas negativas e a T3** |
 | E0-14 primitivo Glass | ✅ | 8 asserções de estilo computado × 2 viewports, vermelhas primeiro (rota e componente inexistentes) · trava estendida vista reprovando contra `rgba()` num componente e `backdrop-blur` fora do vidro · 404 da vitrine provado contra um **segundo servidor** sem a flag |
 
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
@@ -98,15 +100,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [x] **Ambiente da máquina** — WSL reinstalado, Docker de pé, `uv`/`pnpm`/`supabase` instalados (tabela abaixo)
 - [x] **Trilha T1** — E0-01 a E0-05, esqueleto do monorepo (`eacddb3`)
 - [x] **Trilha T2** — E0-06 a E0-12: relógio injetável, migration 0001 + `rls`, pgmq real, jornada E2E, `pr.yml`, `main.yml`, provas N1/N2/N4, `main` protegida por ruleset
-- [x] **Trilha T3, 7 de 9** — E0-13 tokens · E0-14 vidro · E0-16 vitrine · E0-17 harness visual · E0-15 L1 · E0-15 L2 · E0-15 L4
-
-### A fazer — Trilha T3 (caminho crítico)
-
-- [ ] **E0-15 L3 · navegação e dados** — sidebar agrupada 242px, topbar, tab bar de vidro do mobile (4 destinos), tabela de dados, paginação
-  - [ ] tab bar só abaixo do breakpoint, alvo de toque ≥ 44px afirmado
-  - [ ] tab bar é vidro `chrome` — confirmar que não empilha sobre outro vidro
-  - [ ] baselines novas no runner; as dos lotes anteriores **inalteradas**
-- [ ] **E0-18 · prova negativa N3** — alterar o padding de um botão em PR descartável e ver a regressão visual reprovar **nos dois viewports**; registrar PR/run/job na tabela do §E0-12 do plano
+- [x] **Trilha T3 — completa (9 de 9)** — E0-13 tokens · E0-14 vidro · E0-16 vitrine · E0-17 harness visual · E0-15 L1/L2/L3/L4 · E0-18 prova N3
 
 ### A fazer — Trilha T4 (bloqueada nos pré-requisitos do Bruno)
 
@@ -118,7 +112,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [ ] **E0-22** primeiro segredo no padrão ADR-11 + teste `db` dos dois sentidos (executável por um role, negada ao outro)
 - [ ] **E0-23** deploy de staging: migrations → edge functions → runtime (desligamento gracioso) → fumaça
 
-### Placar das oito provas do §12 — 5 de 8
+### Placar das oito provas do §12 — 7 de 8
 
 | # | Prova | Estado |
 |---|---|---|
@@ -128,7 +122,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 | 4 | Gates bloqueantes como checks obrigatórios antes da primeira feature | ✅ E0-10 |
 | 5 | N1 — quebra de fronteira de módulo reprova | ✅ |
 | 6 | N2 — SQL fora da camada de repositório reprova | ✅ |
-| 7 | N3 — alteração de componente reprova a regressão nos 2 viewports | ⬜ E0-18 |
+| 7 | N3 — alteração de componente reprova a regressão nos 2 viewports | ✅ E0-18 |
 | 8 | N4 — leitura cross-tenant reprova a suíte `rls` | ✅ |
 
 ### Antes dos próximos marcos
@@ -219,6 +213,10 @@ Ficam registradas aqui porque mudam como o código se comporta:
 47. **O modal é o `<dialog>` nativo com `showModal()`** — focus trap, Esc e top layer vêm de graça, e o ônus da prova é de quem quer a dependência. A modalidade é afirmada pelo **`::backdrop`**, que só é renderizado quando aberto modalmente; um `aria-modal="true"` escrito à mão provaria apenas que alguém o digitou.
 48. **Dois falsos positivos na trava de cor, ambos consertados com o teste vendo antes.** (a) Ela flagrava `backdrop-filter` escrito num **comentário** — mesma lição dos detectores do E0-06: prosa não é violação, e flagrar comentário ensina a parar de comentar. (b) Flagrava `#4821`, número de pedido na copy, porque quatro dígitos hex são quatro dígitos hex. Em TS a cor passou a exigir contexto de cor (aspas, parêntese ou dois-pontos); em CSS a forma nua continua valendo, senão `border: 1px solid #fff` escaparia.
 49. **A ilegibilidade do light é sistêmica, não incidental.** Três lotes seguidos, mesma causa: a paleta dark é branco-sobre-escuro do começo ao fim, e cada componente novo herda isso. A regra que fica: **conferir o tema light antes de gerar baseline é etapa obrigatória de todo lote** — e o conserto é sempre superfície recuada aprovada + texto escuro o bastante, nunca matiz inventado. A causa raiz continua sendo a pendência de design: a seção 12 desenha light para um punhado de componentes.
+
+50. **O status `pending_approval` não existia.** O enum de `tenants.status` na migration 0001 é `onboarding · shadow · active · paused · cancelled`; o L2 tinha inventado `pending_approval` a partir da copy do design ("em aprovação"). Renomeado em componente, tokens, seletores, testids e specs. **Badge que mostra estado que o banco não segura é badge que mente** — e fica a pergunta para o design: "em aprovação" é mesmo o estado `onboarding`, ou é a aprovação de uma versão do agente, que é outra coisa?
+51. **O raio da sabotagem N3 foi exatamente onde o componente aparece.** Mudar o padding do botão `md` reprovou só a seção 05 — o botão do estado vazio é `sm` e os do modal só existem com o diálogo aberto. Uma trava que reprovasse seções sem o componente estaria reprovando por ruído, e é isso que a captura por seção (decisão 37) compra.
+52. **Uma diferença de 1px sem causa identificada.** Ao regravar as baselines no L3, as seções 10 e 11 mudaram 1px de altura com as imagens visualmente idênticas. Nenhuma regra do L3 toca aquelas seções, e não achei a causa — fica registrado em vez de inventada. Se repetir em outro lote, investigar **antes** de regravar.
 
 ---
 
