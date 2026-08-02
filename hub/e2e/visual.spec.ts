@@ -26,21 +26,31 @@ import { expect, test } from "@playwright/test";
 
 const THEMES = ["dark", "light"] as const;
 
-test.describe("visual regression", () => {
-  for (const theme of THEMES) {
-    test(`section 03 · liquid glass · ${theme}`, async ({ page }) => {
-      await page.goto("/design");
-      await page.evaluate(
-        (selected) => document.documentElement.setAttribute("data-theme", selected),
-        theme,
-      );
+// One entry per section that has something to compare. Each lot of E0-15 adds
+// its own and touches nobody else's baseline.
+const SECTIONS = [
+  { id: "03", name: "liquid-glass" },
+  { id: "05", name: "botoes" },
+  { id: "06", name: "campos-e-controles" },
+];
 
-      // The section sits on the opaque stage the showcase draws behind every
-      // component (R1): a blur photographed over a gradient is the least
-      // deterministic pixel in the system.
-      await expect(page.getByTestId("showcase-section-03")).toHaveScreenshot(
-        `secao-03-glass-${theme}.png`,
-      );
-    });
+test.describe("visual regression", () => {
+  for (const section of SECTIONS) {
+    for (const theme of THEMES) {
+      test(`section ${section.id} · ${section.name} · ${theme}`, async ({ page }) => {
+        await page.goto("/design");
+        await page.evaluate(
+          (selected) => document.documentElement.setAttribute("data-theme", selected),
+          theme,
+        );
+
+        // The section sits on the opaque stage the showcase draws behind every
+        // component (R1): a blur photographed over a gradient is the least
+        // deterministic pixel in the system.
+        await expect(page.getByTestId(`showcase-section-${section.id}`)).toHaveScreenshot(
+          `secao-${section.id}-${section.name}-${theme}.png`,
+        );
+      });
+    }
   }
 });
