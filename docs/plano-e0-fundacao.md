@@ -43,7 +43,7 @@ E, principalmente: **um gate que nunca reprovou não é um gate.** As quatro pro
 | # | Sabotagem deliberada | Gate que precisa reprovar |
 |---|---|---|
 | N1 | `channels` importa `connectors` | teste de fronteiras de módulo (import-linter) |
-| N2 | `SELECT` escrito fora da camada de repositório | lint anti-SQL |
+| N2 | `SELECT` escrito fora da camada de repositório | teste-fitness anti-SQL (nível `unit`) |
 | N3 | padding de um botão alterado | regressão visual (desktop **e** mobile) |
 | N4 | leitura cross-tenant com `worker_role` | suíte `rls` |
 
@@ -147,8 +147,9 @@ T4 Infra + observabilidade (E0-19 … E0-23)  ──── paralela, com pré-re
 |---|---|
 | `lint` | ruff (inclui a proibição de `print`) + eslint |
 | `boundaries` | import-linter com os contratos da arquitetura §3 — no mínimo: `channels` ⊘ `connectors`; `agent_core` e `dispatch` ⊘ `channels` (nada chama a API do WhatsApp exceto senders); todo módulo ⊘ SQL direto |
-| `sql-lint` | falha se houver SQL fora de `repository/` e das migrations |
 | `tests-py` | `pytest -m unit` + `-m db` + `-m rls` com Postgres efêmero |
+
+**Alteração registrada (E0-06):** o job `sql-lint` previsto aqui **deixou de existir como job**. A trava "SQL fora de `repository/`" foi implementada como teste-fitness de nível `unit` (`runtime/tests/unit/test_no_sql_outside_repository.py`), pelo mesmo motivo da trava do relógio: roda no gate `unit`, é reproduzível localmente sem CI e detecta por AST em vez de regex (uma docstring que cita `SELECT` não é violação; uma query montada em string é). O gate continua bloqueante — só mudou de job para asserção. A sabotagem N2 passa a ser verificada contra `tests-py`.
 
 **Prova:** a própria sabotagem N1 e N2.
 **Pronto quando:** os quatro jobs são checks obrigatórios na proteção de branch da `main`.

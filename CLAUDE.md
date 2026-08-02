@@ -4,63 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-Planning/specification repository for a multi-tenant B2B SaaS: WhatsApp AI agents that recover lost e-commerce sales (abandoned cart, checkout, unpaid PIX) and do full customer support, for Shopify, Nuvemshop and Yampi stores. Developed solo by Bruno with Claude Code.
+Multi-tenant B2B SaaS: WhatsApp AI agents that recover lost e-commerce sales (abandoned cart, checkout, unpaid PIX) and do full customer support, for Shopify, Nuvemshop and Yampi stores. Developed solo by Bruno with Claude Code.
 
-**There is no code yet.** Everything lives in `core/` as Portuguese-language design documents. These docs are the approved specification — when implementation starts, they are the source of truth, and changes to behavior go through the docs first.
-
-## The documents (all in `core/`)
-
-| Document | Role |
-|---|---|
-| `arquitetura-plataforma-agentes-whatsapp.md` | **The architecture (v1.3, approved).** 12 ADRs, data model, critical flows, NFRs, fitness functions, scaling triggers. Read this first. |
-| `requisitos-e-entidades.md` | Functional (RF-xxx) and non-functional (RNF-xxx) requirements. Screens and tests trace back to these IDs. |
-| `dicionario-de-dados.md` | Column-level data dictionary — the step immediately before writing the SQL schema. Conventions: uuid PKs, `timestamptz`, enums as `text + CHECK`, `tenant_id` + RLS on every business table, E.164 phones. |
-| `ordem-de-execucao.md` | **Execution order (v2.0) — the current work plan.** Milestones E0–E8, dual-track (engine test-first / UI design-first), the daily red→green→refactor cycle, definition of done. |
-| `plano-de-testes.md` | Test plan: 10 objectives (O1–O10) mapped to architecture invariants. |
-| `testes-e-cicd.md` | What is unit vs. integration vs. E2E (pytest markers, ephemeral Postgres in CI, Playwright, cassettes for external APIs) and what runs at each CI/CD gate. |
-| `observabilidade-e-monitoramento.md` | Dual stack: Logfire (LLM traces, cost, debugging) + Grafana Cloud (metrics, alerting, IRM, synthetics), all via OpenTelemetry through Grafana Alloy. PII never in telemetry. |
-| `telas-da-aplicacao.md` | Complete screen inventory: A = public onboarding form, B = merchant hub, C = admin, D = transversal. Desktop and mobile are both first-class. |
-
-## Architecture in one paragraph
-
-Modular monolith + async workers, config-driven, no microservices. Three execution planes: **Hub** (Next.js on Vercel — onboarding form, merchant hub, admin), **Ingestion** (Supabase Edge Functions — validate webhook, persist in a single SQL transaction via `ingest_webhook()`, respond 200 in ms), **Runtime** (single-process asyncio Python service in Docker on a VPS — workers, coalescer, scheduler, senders). **Postgres (Supabase) is the single source of truth for everything**: data, versioned config, conversations, queues (pgmq), outbox, vectors (pgvector), evals. Tenants differ only by config in the database, never by code.
-
-## Non-negotiable invariants (from the ADRs)
-
-Any code written here must respect these; the fitness functions in §8 of the architecture doc test them in CI:
-
-- **Short transactions always.** No transaction stays open across an LLM call or external API call. Conversation exclusivity is lease + compare-and-set (claim → work outside any transaction → CAS conclusion), never a transactional advisory lock.
-- **Central invariant:** a message arriving *during* LLM generation invalidates the draft. The CAS at conclusion requires `processing_generation` and `next_inbound_seq = target_seq`; on failure the draft is discarded, never sent.
-- **Ingestion never enqueues inbound jobs.** Inbound messages get an atomic `seq` and set `pending_response_at`; only the coalescer (2s tick, single transaction, generation counter) creates the job. Job dedup is validation in the worker, not a pgmq feature.
-- **No `SELECT max(seq)+1`.** Sequences come from atomic counters on `conversations` (`next_inbound_seq`/`next_outbound_seq`), with `UNIQUE (conversation_id, direction, seq)`.
-- **Nothing calls the WhatsApp API except senders.** `agent_core` and `dispatch` only write to `message_outbox` (inside the FASE 3 transaction). Outbox `unknown` state is never blindly resent — wait for status webhook correlation (`biz_opaque_callback_data`), then manual review.
-- **Webhook idempotency includes the source account:** `UNIQUE (source, source_account_id, external_event_id)` — platforms with per-store sequential IDs would otherwise mask each other's events.
-- **Cross-tenant access only via `SECURITY DEFINER` claim functions** (e.g. `claim_outbox_batch`) with fixed `search_path`, EXECUTE revoked from PUBLIC. App roles (`worker_role`, `sender_role`) have RLS, separate pools, no `BYPASSRLS`; secrets only through scoped functions, never a general grant on Vault views.
-- **Module boundaries are enforced** (CI fails if e.g. `channels` imports `connectors`); SQL only in the repository layer; internal tables (outbox, pgmq queues, evals) stay out of the Data API schema.
-- **Every agent response passes Judge 1 before sending.**
-- **LGPD:** secondary use of conversations (training/benchmarks) is SUSPENDED (ADR-12); cancelled-merchant purge is hard delete with no copy. Default is NOT to collect CPF/birthdate.
-
-## Development method (binding, from ordem-de-execucao v2.0)
-
-- **Test-first everywhere:** no production code without a red test that demands it. Engine invariants are specified as integration tests first; business rules as unit tests first; screens as Playwright E2E journeys written from the screens doc before the screen exists.
-- **Design-first for UI:** all screens are already designed (Figma — consume frames via the Figma MCP). The design is a contract; divergence is a bug. Design system (tokens + components) is extracted once in E0 and all screens consume it — no ad-hoc CSS. Fidelity is verified by visual regression in CI (desktop + mobile viewports), never by eye and never comparing local captures.
-- **Milestone order:** E0 foundation + design system → E1 engine steel thread → E2 real agent (eval rubrics before the agent) → E3 recovery funnels → E4 onboarding → E5 hub → E6 admin/observability → E7 hardening + pilot → E8 remaining connectors. UI static form block runs in parallel with E1–E3.
-- **Definition of done:** test written first and now green; visual regression green (both viewports) when there's a screen; full CI green; observability of the delivery live; no S1/S2 opened.
-
-## Planned stack (for when code appears)
-
-- Runtime: Python, single asyncio process, Docker on VPS; pytest with level markers (`unit`, db, pipeline), ephemeral Postgres in CI.
-- Hub: Next.js on Vercel, Supabase client with RLS + Realtime.
-- Ingestion: Supabase Edge Functions.
-- DB: Supabase Postgres with pgmq, pgvector, Vault, RLS.
-- E2E/visual: Playwright (desktop + mobile viewports, CI-only baselines).
-- Observability: OpenTelemetry → Grafana Alloy → Logfire + Grafana Cloud.
-
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-**There is no code yet.** Everything lives in `core/` as Portuguese-language design documents. These docs are the approved specification — when implementation starts, they are the source of truth, and changes to behavior go through the docs first.
+The approved specification lives in `core/` as Portuguese-language design documents. **The docs are the source of truth: changes to behavior go through the docs first.** Implementation started at milestone E0 — see `docs/plano-e0-fundacao.md` for the current plan and `docs/plano-de-kickoff.md` for the E0→E8 path.
 
 ## The documents (all in `core/`)
 
@@ -113,7 +59,7 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 ## Development method (binding, from ordem-de-execucao v2.0)
 
 - **Test-first everywhere:** no production code without a red test that demands it. Engine invariants are specified as integration tests first; business rules as unit tests first; screens as Playwright E2E journeys written from the screens doc before the screen exists.
-- **Design-first for UI:** all screens are already designed (Figma — consume frames via the Figma MCP). The design is a contract; divergence is a bug. Design system (tokens + components) is extracted once in E0 and all screens consume it — no ad-hoc CSS. Fidelity is verified by visual regression in CI (desktop + mobile viewports), never by eye and never comparing local captures.
+- **Design-first for UI:** all screens are already designed in **Claude Design** (project `e1663386-2e39-46c6-a6e5-829b532d1362`, read via the DesignSync tool): `Agents Worder - Design System.dc.html` ("Obsidian Glass" v1.0) plus the `Dashboard`, `Formulário` and `Hub` screens. The design is a contract; divergence is a bug. Caveat: the screens exist in **desktop frames only** — mobile follows the design system's rules (breakpoint < 860px, 44px touch target, glass tab bar), not a frame. Design system (tokens + components) is extracted once in E0 and all screens consume it — no ad-hoc CSS. Fidelity is verified by visual regression in CI (desktop + mobile viewports), never by eye and never comparing local captures.
 - **Milestone order:** E0 foundation + design system → E1 engine steel thread → E2 real agent (eval rubrics before the agent) → E3 recovery funnels → E4 onboarding → E5 hub → E6 admin/observability → E7 hardening + pilot → E8 remaining connectors. UI static form block runs in parallel with E1–E3.
 - **Definition of done:** test written first and now green; visual regression green (both viewports) when there's a screen; full CI green; observability of the delivery live; no S1/S2 opened.
 
@@ -139,7 +85,7 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 | Message retention | rolling TTL 12–24 months (tenant config, default 12) · cancelled-merchant purge: hard delete after 10 days |
 | Revenue attribution | order paid ≤ 24h after a touch (tenant-configurable) |
 
-## Planned stack (for when code appears)
+## Stack
 
 - Runtime: Python, single asyncio process, Docker on VPS; pytest with level markers (`unit`, `db`, `rls`, `pipeline`, `contract`), ephemeral Postgres in CI.
 - Hub: Next.js on Vercel, Supabase client with RLS + Realtime.
@@ -151,7 +97,45 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 
 ## Commands
 
-*(placeholder — fill in at E0, the day the first `pytest`/`pnpm` targets exist: how to run each test level, the E2E suite, lint, and local services.)*
+All commands run from the repository root.
+
+**Runtime (Python, `uv`)**
+
+| Command | What it does |
+|---|---|
+| `uv sync --directory runtime` | install/refresh dependencies from `uv.lock` |
+| `uv run --directory runtime pytest -m unit` | unit level — no I/O at all, whole suite < 60s |
+| `uv run --directory runtime pytest -m db` | real Postgres: SQL functions, constraints, triggers |
+| `uv run --directory runtime pytest -m rls` | cross-tenant leak suite (JWT, `worker_role`, `sender_role`) |
+| `uv run --directory runtime pytest -m pipeline` | full runtime loop + Postgres + pgmq |
+| `uv run --directory runtime pytest -m contract` | ONE real external API — never blocking on a PR |
+| `uv run --directory runtime ruff check .` | lint (includes the ban on `print`) |
+| `uv run --directory runtime ruff format .` | format |
+| `uv run --directory runtime lint-imports` | module boundary contracts (arquitetura §3) |
+
+The test level comes from the directory (`tests/unit/`, `tests/db/`, …) via `tests/conftest.py`; `rls` is the one marker applied by hand, because the leak suite lives inside `tests/db/`.
+
+**Hub (Next.js, `pnpm`)**
+
+| Command | What it does |
+|---|---|
+| `pnpm --dir hub install` | install dependencies |
+| `pnpm --dir hub dev` | dev server on :3000 |
+| `pnpm --dir hub build` | production build (runs `tsc`) |
+| `pnpm --dir hub lint` / `typecheck` | eslint / TypeScript |
+| `pnpm --dir hub e2e` | Playwright journeys, desktop + mobile |
+
+Visual comparisons are **skipped locally on purpose** (`ignoreSnapshots` when `CI` is unset) — baselines are produced only by CI, never by a local capture.
+
+**Database (Supabase CLI — requires Docker running)**
+
+| Command | What it does |
+|---|---|
+| `supabase start` | full local stack (Postgres on :54322, Studio on :54323) |
+| `supabase start -x "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"` | Postgres + GoTrue only — what the `db`/`rls`/`pipeline` suites actually need. Two containers instead of fourteen. Quote the list: PowerShell parses an unquoted comma-separated value as an array and silently drops all but the first name |
+| `supabase db reset` | drop, recreate and re-apply every migration |
+| `supabase migration new <name>` | new migration file |
+| `supabase stop` | tear the local stack down |
 
 ## When in doubt
 

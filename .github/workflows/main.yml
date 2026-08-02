@@ -1,0 +1,70 @@
+# What runs after a merge — E0-11.
+#
+# The whole PR gate again (one definition, called, not copied) plus the level a
+# PR does not pay for: `pipeline`, the real loop against a real pgmq. Target is
+# under 15 minutes.
+#
+# Deploy to staging already lives here, behind a flag that is off. It turns on
+# in E0-23, once there is a VPS (B-1) and a staging Supabase (B-5).
+
+name: main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never cancel a run on `main`: it is the record of what that commit passed.
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  SUPABASE_EXCLUDE: realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+jobs:
+  gate:
+    uses: ./.github/workflows/pr.yml
+
+  tests-pipeline:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+
+      - name: Start the lean stack
+        run: supabase start -x "$SUPABASE_EXCLUDE"
+
+      - run: uv run --directory runtime pytest -m pipeline
+
+  deploy-staging:
+    needs: tests-pipeline
+    if: ${{ vars.DEPLOY_STAGING == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Deliberately loud rather than a no-op. A job that "succeeds" without
+      # deploying teaches everyone to trust a green check that means nothing —
+      # the same failure mode the E0 queue handler refuses. Turning the flag on
+      # before E0-23 exists should stop the pipeline, not decorate it.
+      - name: Not implemented yet
+        run: |
+          echo "DEPLOY_STAGING is on, but the deploy lands in E0-23:" >&2
+          echo "migrations -> edge functions -> runtime -> hub -> smoke," >&2
+          echo "and it needs the VPS (B-1) and the staging Supabase (B-5)." >&2
+          exit 1

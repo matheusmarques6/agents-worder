@@ -1,0 +1,114 @@
+[project]
+name = "agents-runtime"
+version = "0.1.0"
+description = "WhatsApp AI agents runtime — workers, coalescer, scheduler and senders as tasks of a single asyncio process."
+requires-python = ">=3.13"
+# Postgres is the only thing the runtime talks to directly (ADR-01), so psycopg3
+# is the one production dependency the queue transport needs. It is also what
+# `obs` will instrument later (observabilidade §3, instrument_psycopg), so the
+# test harness and the runtime speak to the database through the same driver
+# rather than two.
+dependencies = [
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=1.0",
+    "freezegun>=1.5",
+    "ruff>=0.14",
+    "import-linter>=2.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agents_runtime"]
+
+# --- Tests -------------------------------------------------------------------
+# Levels are defined in core/testes-e-cicd.md §1. --strict-markers makes an
+# undeclared marker an error, not a warning: a test can never silently escape
+# its level and thus the CI gate that runs it.
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config -ra"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: no I/O at all — no Postgres, no network, no filesystem. Whole suite < 60s",
+    "db: real Postgres — SQL functions, constraints, triggers",
+    "rls: cross-tenant leak suite, run with all three credentials (JWT, worker_role, sender_role)",
+    "pipeline: full runtime loop + Postgres + pgmq; LLM and external APIs simulated",
+    "contract: ONE real external API. Never blocking on a PR",
+]
+
+# --- Lint --------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "UP",       # pyupgrade
+    "B",        # bugbear
+    "ASYNC",    # async correctness
+    "T20",      # flake8-print — `print` is forbidden: logging goes through the Logfire SDK
+    "DTZ",      # naive datetimes are a bug in a system that reasons about timezones
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may build naive datetimes on purpose when asserting clock behaviour.
+"tests/**" = ["DTZ"]
+
+# --- Module boundaries -------------------------------------------------------
+# Fitness function nº 1 of arquitetura §8. These contracts are what make the
+# module table of arquitetura §3 an enforced boundary instead of a convention.
+[tool.importlinter]
+root_packages = ["agents_runtime"]
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "channels and connectors never know about each other"
+type = "independence"
+modules = [
+    "agents_runtime.channels",
+    "agents_runtime.connectors",
+]
+
+[[tool.importlinter.contracts]]
+name = "nothing calls the WhatsApp API except senders (channels)"
+type = "forbidden"
+source_modules = [
+    "agents_runtime.agent_core",
+    "agents_runtime.dispatch",
+    "agents_runtime.judges",
+    "agents_runtime.onboarding",
+]
+forbidden_modules = ["agents_runtime.channels"]
+
+[[tool.importlinter.contracts]]
+name = "only the repository layer reaches the database"
+type = "forbidden"
+# `agents_runtime.app` is deliberately absent: the composition root is where the
+# pools are built and handed to everyone else, so it is the one module that has
+# to know the driver exists. Every module that receives them is listed here.
+source_modules = [
+    "agents_runtime.agent_core",
+    "agents_runtime.channels",
+    "agents_runtime.connectors",
+    "agents_runtime.dispatch",
+    "agents_runtime.inbox",
+    "agents_runtime.judges",
+    "agents_runtime.onboarding",
+    "agents_runtime.queueing",
+    "agents_runtime.quota",
+    "agents_runtime.tools",
+]
+forbidden_modules = ["agents_runtime.repository.driver"]

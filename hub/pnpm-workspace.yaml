@@ -1,0 +1,8 @@
+# pnpm blocks post-install build scripts by default. These two are required by
+# the stack we chose, so the decision is recorded here instead of being waved
+# through interactively:
+#   sharp         — image optimisation used by next/image at build time
+#   unrs-resolver — native module resolver used by eslint-config-next
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
