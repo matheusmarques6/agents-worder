@@ -2,6 +2,15 @@ import { notFound } from "next/navigation";
 
 import { Button } from "@/components/button";
 import { InputField, TextareaField } from "@/components/field";
+import {
+  Alert,
+  ConnectionStatus,
+  EmptyState,
+  Skeleton,
+  StatusBadge,
+  TechBadge,
+  Toast,
+} from "@/components/feedback";
 import { Glass } from "@/components/glass";
 
 import { ControlsDemo } from "./controls-demo";
@@ -349,6 +358,76 @@ const CONTENT: Record<string, React.ReactNode> = {
       </div>
 
       <ControlsDemo />
+    </Stage>
+  ),
+
+  "07": (
+    <Stage>
+      <div className="flex w-full flex-col gap-card desk:flex-row desk:items-start">
+        <div className="flex flex-1 flex-col gap-card">
+          <Label>Status do tenant e do agente</Label>
+          <div className="flex flex-wrap gap-item">
+            <StatusBadge status="active" data-testid="status-active">
+              ativo
+            </StatusBadge>
+            <StatusBadge status="paused" data-testid="status-paused">
+              pausado
+            </StatusBadge>
+            <StatusBadge status="pending_approval" data-testid="status-pending_approval">
+              em aprovação
+            </StatusBadge>
+            <StatusBadge status="shadow" data-testid="status-shadow">
+              shadow · 4d
+            </StatusBadge>
+            <StatusBadge status="cancelled" data-testid="status-cancelled">
+              cancelado
+            </StatusBadge>
+          </div>
+
+          <Label>Numéricos e técnicos</Label>
+          <div className="flex flex-wrap items-center gap-item">
+            <TechBadge tone="count">12</TechBadge>
+            <TechBadge tone="strong" data-testid="tech-version">
+              v12
+            </TechBadge>
+            <TechBadge tone="neutral">RF-041</TechBadge>
+            <TechBadge tone="success">score 0.92</TechBadge>
+            <TechBadge tone="danger">DLQ 3</TechBadge>
+          </div>
+
+          <Label>Carregando e vazio</Label>
+          <div className="flex flex-col gap-item">
+            <Skeleton data-testid="skeleton-line" />
+            <Skeleton width="70%" />
+          </div>
+          <EmptyState
+            title="Nenhuma conversa ainda"
+            description="Assim que o agente for ativado, as conversas do WhatsApp aparecem aqui em tempo real."
+            action={
+              <Button size="sm" data-testid="empty-action">
+                Ativar agente
+              </Button>
+            }
+          />
+        </div>
+
+        <div className="flex flex-1 flex-col gap-cards">
+          <Toast title="Nova versão salva" data-testid="toast-success">
+            v13 está valendo em produção. Desfazer?
+          </Toast>
+          <Alert
+            tone="warning"
+            title="Isso muda o agente em produção"
+            data-testid="alert-warning"
+          >
+            Revise o diff antes de salvar.
+          </Alert>
+          <Alert tone="danger" title="Número desconectado" data-testid="alert-danger">
+            O WhatsApp caiu há 8 min
+          </Alert>
+          <ConnectionStatus>Reconectando ao tempo real…</ConnectionStatus>
+        </div>
+      </div>
     </Stage>
   ),
 
