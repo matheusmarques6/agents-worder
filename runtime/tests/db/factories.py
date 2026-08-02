@@ -225,3 +225,28 @@ def create_webhook_event(
         )
         (event_id,) = cur.fetchone()
     return event_id
+
+
+def make_due(
+    conn: psycopg.Connection,
+    conversation_id: uuid.UUID,
+    *,
+    last_inbound_seq: int = 1,
+    overdue_seconds: int = 1,
+) -> None:
+    """Coloca o prazo do debounce no passado.
+
+    O prazo é decidido em SQL contra `now()`, então empurrar `pending_response_at`
+    para trás é o que deixa a suíte testar o coalescer sem esperar dez segundos
+    de verdade — o relógio injetado cobre o laço, isto cobre o banco.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            update public.conversations
+               set pending_response_at = now() - make_interval(secs => %s),
+                   next_inbound_seq = %s
+             where id = %s
+            """,
+            (overdue_seconds, last_inbound_seq, conversation_id),
+        )
