@@ -11,9 +11,10 @@ import { Glass } from "@/components/glass";
 // cannot separate the green from the red, and because a dashboard read at a
 // glance is read by people, not by pixels.
 
-/** The five values of `tenants.status` (migration 0001). Identifiers in
+/** The five values of `tenants.status` (migration 0001) — verbatim, so a
+ * badge can never show a state the database cannot hold. Identifiers in
  * English like everything else in the codebase; the copy is the caller's. */
-export type TenantStatus = "active" | "paused" | "pending_approval" | "shadow" | "cancelled";
+export type TenantStatus = "active" | "paused" | "onboarding" | "shadow" | "cancelled";
 
 /** Shadow is drawn without a dot — its dashed border is the signal. */
 const WITHOUT_DOT: TenantStatus[] = ["shadow"];

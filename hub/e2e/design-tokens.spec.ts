@@ -174,7 +174,7 @@ const FEEDBACK = {
   "--text-tech": "10.5px",
   "--color-status-active-border": "rgba(249, 115, 22, 0.30)",
   "--color-status-paused-border": "rgba(255, 255, 255, 0.12)",
-  "--color-status-pending-border": "rgba(250, 204, 21, 0.26)",
+  "--color-status-onboarding-border": "rgba(250, 204, 21, 0.26)",
   "--color-status-shadow-border": "rgba(249, 115, 22, 0.5)",
   "--color-status-cancelled-border": "rgba(244, 63, 94, 0.28)",
 };

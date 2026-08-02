@@ -11,7 +11,19 @@ import {
   TechBadge,
   Toast,
 } from "@/components/feedback";
+import { Cell, DataTable, Pagination } from "@/components/data-table";
 import { Glass } from "@/components/glass";
+import {
+  NavGroup,
+  NavItem,
+  Segmented,
+  SegmentedItem,
+  Sidebar,
+  StoreSwitcher,
+  TabBar,
+  TabBarItem,
+  Topbar,
+} from "@/components/navigation";
 
 import { ControlsDemo } from "./controls-demo";
 import { ConversationDemo, OverlayDemo } from "./conversation-demo";
@@ -374,7 +386,7 @@ const CONTENT: Record<string, React.ReactNode> = {
             <StatusBadge status="paused" data-testid="status-paused">
               pausado
             </StatusBadge>
-            <StatusBadge status="pending_approval" data-testid="status-pending_approval">
+            <StatusBadge status="onboarding" data-testid="status-onboarding">
               em aprovação
             </StatusBadge>
             <StatusBadge status="shadow" data-testid="status-shadow">
@@ -428,6 +440,81 @@ const CONTENT: Record<string, React.ReactNode> = {
           </Alert>
           <ConnectionStatus>Reconectando ao tempo real…</ConnectionStatus>
         </div>
+      </div>
+    </Stage>
+  ),
+
+  "08": (
+    <Stage>
+      <div className="flex w-full flex-col gap-card desk:flex-row desk:items-start">
+        <Sidebar data-testid="sidebar">
+          <StoreSwitcher label="Loja" name="Bella Store" />
+          <NavGroup label="Operação">
+            <NavItem current>Inbox</NavItem>
+            <NavItem badge={<TechBadge tone="count">12</TechBadge>}>Conversas</NavItem>
+            <NavItem>Funis</NavItem>
+          </NavGroup>
+        </Sidebar>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-cards">
+          <Topbar>
+            <span className="text-card font-semibold">Visão geral</span>
+            <span className="text-small text-fg-subtle">
+              título · contexto · busca · período · ação · avatar
+            </span>
+          </Topbar>
+
+          <Segmented label="Período">
+            <SegmentedItem selected>30d</SegmentedItem>
+            <SegmentedItem>7d</SegmentedItem>
+            <SegmentedItem>Hoje</SegmentedItem>
+          </Segmented>
+
+          <TabBar label="Navegação principal" data-testid="tabbar">
+            <TabBarItem current data-testid="tabbar-home">
+              Home
+            </TabBarItem>
+            <TabBarItem data-testid="tabbar-inbox">Inbox</TabBarItem>
+            <TabBarItem data-testid="tabbar-agente">Agente</TabBarItem>
+            <TabBarItem data-testid="tabbar-mais">Mais</TabBarItem>
+          </TabBar>
+        </div>
+      </div>
+    </Stage>
+  ),
+
+  "09": (
+    <Stage>
+      <div className="flex w-full flex-col gap-item">
+        <DataTable caption="Conversas recentes" head={["Contato", "Ocasião", "Última", "Status"]}>
+          <tr data-testid="table-row-marina">
+            <Cell>Marina A.</Cell>
+            <Cell kind="muted">PIX não pago</Cell>
+            <Cell kind="numeric" data-testid="table-cell-elapsed">
+              2 min
+            </Cell>
+            <Cell>
+              <StatusBadge status="active">ativo</StatusBadge>
+            </Cell>
+          </tr>
+          <tr>
+            <Cell>Diego R.</Cell>
+            <Cell kind="muted">Carrinho</Cell>
+            <Cell kind="numeric">14 min</Cell>
+            <Cell>
+              <StatusBadge status="paused">humano</StatusBadge>
+            </Cell>
+          </tr>
+          <tr>
+            <Cell>Camila S.</Cell>
+            <Cell kind="muted">Rastreio</Cell>
+            <Cell kind="numeric">1 h</Cell>
+            <Cell>
+              <StatusBadge status="cancelled">encerrada</StatusBadge>
+            </Cell>
+          </tr>
+        </DataTable>
+        <Pagination range="1–3 de 128" page={1} data-testid="pagination" />
       </div>
     </Stage>
   ),

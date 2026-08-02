@@ -10,12 +10,12 @@ import { canonical } from "./support/css";
 // words, because eight percent of men cannot separate the green from the red,
 // and because a screenshot of a colour is not an accessible interface.
 
-const STATUSES = ["active", "paused", "pending_approval", "shadow", "cancelled"];
+const STATUSES = ["active", "paused", "onboarding", "shadow", "cancelled"];
 
 const LABELS: Record<string, RegExp> = {
   active: /ativo/i,
   paused: /pausado/i,
-  pending_approval: /aprovação/i,
+  onboarding: /aprovação/i,
   shadow: /shadow/i,
   cancelled: /cancelado/i,
 };
