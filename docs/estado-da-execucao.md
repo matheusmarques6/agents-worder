@@ -102,6 +102,13 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [x] **Trilha T2** — E0-06 a E0-12: relógio injetável, migration 0001 + `rls`, pgmq real, jornada E2E, `pr.yml`, `main.yml`, provas N1/N2/N4, `main` protegida por ruleset
 - [x] **Trilha T3 — completa (9 de 9)** — E0-13 tokens · E0-14 vidro · E0-16 vitrine · E0-17 harness visual · E0-15 L1/L2/L3/L4 · E0-18 prova N3
 
+### A fazer — E1 · steel thread do motor (não depende da T4)
+
+- [x] **Fase 0 · plano detalhado** — `docs/plano-e1-steel-thread.md`: fatia do schema, decisão do canal com rota B, escopo negativo
+- [ ] **Fase 1 · especificação vermelha** — A1 ingest_webhook · A2 contadores · A3 lease/CAS · A4 coalescer · A5 claim_outbox_batch · cenários 1–10 · regras do queueing
+- [ ] **Fase 2 · implementação** — migrations 0003+ → ingest_webhook() → filas restantes → queueing → coalescer → lease/CAS → outbox+sender → canal com resposta fixa → heartbeat
+- [ ] **Fase 3 · provas do marco** — abandono real chega no WhatsApp · kill -9 não perde nada · heartbeat ≤ 3 min
+
 ### A fazer — Trilha T4 (bloqueada nos pré-requisitos do Bruno)
 
 - [ ] **B-4 · disparar o gap-check agora** — verificação Meta **incluindo Embedded Signup**, números de teste, webhooks das lojas dev nas 3 plataformas, instância Evolution. Não bloqueia o E0, mas é o maior risco de calendário do projeto
