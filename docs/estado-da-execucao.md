@@ -18,19 +18,36 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-04 supabase (config) | ⚠️ parcial | `config.toml` gerado e ajustado; **`supabase start` nunca foi executado — falta Docker** |
 | E0-05 CLAUDE.md + convenções | ✅ | seção Commands preenchida; duplicação do arquivo removida; Figma → Claude Design |
 
-**Trilha T2 (harness + CI) — não iniciada.** Próximo item: **E0-06**.
+**Trilha T2 (harness + CI) — iniciada.**
+
+| Item | Estado | Prova executada |
+|---|---|---|
+| E0-06 relógio injetável + fitness | ✅ commit `8771f6f` | `pytest -m unit` 46 verdes · cada trava vista **vermelha** primeiro, contra sabotagem plantada em `dispatch` (relógio) e em `inbox` (SQL) · `ruff check` e `lint-imports` verdes |
+
+Próximo item verificável: **E0-09** (jornada E2E). O **E0-07** e o **E0-08** estão **bloqueados pelo Docker** (§ Bloqueio abaixo) — dá para escrever, não dá para ver vermelho e fechar em verde localmente.
+
+---
+
+## Bloqueio ativo: Docker não sobe porque o WSL não existe
+
+Diagnóstico desta sessão (o reboot não resolveu porque a causa era outra):
+
+- Docker Desktop **está instalado**, fora do caminho padrão: `D:\docker\Programa\`. O CLI responde (`docker 29.6.2`) e a GUI abre.
+- `com.docker.service` existe mas fica **Stopped** (StartMode Manual).
+- **Causa raiz:** `wsl --version`, `wsl -l -v` e `wsl --status` falham todos com "o sistema não pode encontrar o arquivo especificado". O `wsl.exe` existe em `System32`, mas o WSL em si não está instalado/habilitado — e o Docker Desktop no Windows 11 Home depende do backend WSL2.
+- O último log de instalação (`%LOCALAPPDATA%\Docker\install-log.txt`, 2026‑04‑20) mostra o instalador **cancelado no prompt do UAC**.
+
+**Ação do Bruno (precisa de elevação, não dá para fazer daqui):** abrir o PowerShell **como Administrador** e rodar `wsl --install`, reiniciar, e então abrir o Docker Desktop. Depois disso, `docker ps` responde e o `supabase start` volta a ser possível.
 
 ---
 
 ## A retomada, em ordem
 
-1. **Depois do reboot, confirmar o Docker:** `docker --version` e `docker ps`.
-2. **Confirmar que o `uv` entrou no PATH.** Ele foi instalado por winget e o PATH do usuário já tem a pasta, mas os shells desta sessão não pegaram a mudança — o reinício resolve. Se `uv --version` falhar, o binário está em
-   `C:\Users\mathe\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe\uv.exe`.
-3. **`supabase start`** (na raiz do repo) — primeira execução baixa as imagens, demora. É aqui que se fecha o risco R2 do plano: confirmar que a imagem local traz **pgmq** e **pgvector**. Se não trouxer, vale o plano B do E0-04 (serviço Postgres próprio no CI com as extensões).
-4. **E0-06** — relógio injetável (`Clock`) + primeiro teste unitário verde + o teste-fitness que proíbe `datetime.now()`/`time.time()`/`sleep` direto em código de domínio. Não depende de Docker.
-5. **E0-07** — migration `0001` (`tenants`, `profiles`, `memberships` conforme `core/dicionario-de-dados.md` §1.1–1.3), roles `worker_role`/`sender_role` sem BYPASSRLS, políticas RLS nos três caminhos. O teste de vazamento é escrito **antes** da policy, para vazar de verdade e só então fechar.
-6. **E0-08** pgmq · **E0-09** E2E · **E0-10/11** workflows · **E0-12** as quatro provas negativas.
+1. **`supabase start`** (na raiz do repo), assim que o Docker subir — primeira execução baixa as imagens, demora. É aqui que se fecha o risco R2 do plano: confirmar que a imagem local traz **pgmq** e **pgvector**. Se não trouxer, vale o plano B do E0-04 (serviço Postgres próprio no CI com as extensões).
+2. **E0-09** — jornada Playwright na home do hub, nos dois viewports. **Não depende de Docker**; é o próximo item a executar enquanto o WSL não existe. Destrava a trilha T3.
+3. **E0-10/E0-11** — `pr.yml` e `main.yml`. Também não dependem do Docker local: o Postgres efêmero é serviço do GitHub Actions. Ter o CI de pé é o caminho alternativo para ver o E0-07 vermelho→verde sem Docker na máquina.
+4. **E0-07** — migration `0001` (`tenants`, `profiles`, `memberships` conforme `core/dicionario-de-dados.md` §1.1–1.3), roles `worker_role`/`sender_role` sem BYPASSRLS, políticas RLS nos três caminhos. O teste de vazamento é escrito **antes** da policy, para vazar de verdade e só então fechar. **Não aplicar no projeto hospedado** — ele é o único que existe e o B-5 (ambiente de staging) segue indefinido.
+5. **E0-08** pgmq · **E0-12** as quatro provas negativas (a N1 e a N2 já têm mecanismo pronto e visto reprovando localmente; falta o registro em PR descartável).
 
 ---
 
@@ -44,7 +61,8 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | pnpm | 11.18.0 | instalado nesta sessão (`npm i -g`) |
 | uv | 0.11.32 | instalado nesta sessão (winget, escopo de usuário) |
 | supabase CLI | 2.111.0 | instalado nesta sessão (`npm i -g`) |
-| **docker** | — | **pendente — motivo do reboot** |
+| docker CLI | 29.6.2 | `D:\docker\Programa\resources\bin\docker.exe` |
+| **daemon docker** | — | **bloqueado — WSL ausente (ver § Bloqueio)** |
 
 Projeto Supabase hospedado: `agents-worder` / `jmzsxwtflxsrdfjkuusi`, sa-east-1, Postgres 17.6.1, **sem nenhuma migration aplicada**. `pgmq` 1.5.1 e `vector` 0.8.2 disponíveis; `supabase_vault` 0.3.1 já instalado.
 
@@ -59,7 +77,10 @@ Ficam registradas aqui porque mudam como o código se comporta:
 3. **O nível do teste vem do diretório** (`runtime/tests/conftest.py`). Só `rls` é marcador manual, porque a suíte de vazamento mora dentro de `tests/db/`.
 4. **`maxDiffPixelRatio` pequeno mas não zero** (0.002) — `backdrop-filter` não é determinístico ao pixel. Se o ruído voltar, a saída é capturar o vidro sobre fundo sólido de teste, **não** afrouxar o limite.
 5. **`CLAUDE.md` estava duplicado** (linhas 1–58 eram uma cópia antiga e menor da 59–158). Consolidado.
-6. **A trava de SQL fora da camada de repositório** ainda **não existe**. O plano previa um job de lint; a intenção agora é implementá-la como teste unitário de fitness junto com o E0-06, para rodar no gate `unit` e ser reproduzível localmente. **Atualizar o E0-10 do plano quando isso for feito.**
+6. ~~A trava de SQL fora da camada de repositório ainda não existe.~~ **Feito no E0-06** (`runtime/tests/unit/test_no_sql_outside_repository.py`): é teste-fitness de nível `unit`, não job de lint. O `docs/plano-e0-fundacao.md` §E0-10 já foi corrigido — o job `sql-lint` deixou de existir.
+7. **Detecção por AST, não por regex**, nas duas travas do E0-06. Uma docstring que cita `SELECT max(seq)+1` não é violação; `from time import sleep as nap; nap(30)` é. Cada detector carrega os próprios testes, para que a trava não apodreça em decoração que sempre passa.
+8. **`FrozenClock` mora em `runtime/tests/support/`, não no pacote do runtime.** Duplo de teste não viaja na imagem de produção. O `agents_runtime/clock.py` é o único arquivo autorizado a ler o relógio real — é assim que a trava está escrita.
+9. **`runtime/tests/` virou pacote** (`__init__.py` em `tests/`, `tests/unit/`, `tests/support/`). Sem isso, `tests.support` não importa e dois arquivos de teste com o mesmo nome em níveis diferentes colidiriam.
 
 ---
 
