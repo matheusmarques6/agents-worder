@@ -354,6 +354,13 @@
   --color-chip-border: rgba(23, 24, 28, 0.10);
   --color-chip-fg: #5A5B62;
   --color-chip-selected-fg: #9A3412;
+
+  /* Danger text in light. The dark value (#FDA4AF) is a pale rose that reads
+   * at roughly 2:1 on the light surface — a message nobody can read is not a
+   * message. This is the darkest rose the design already uses (the solid
+   * danger button's end stop), so it is reuse, not a new colour. */
+  --color-danger-soft-fg: #E11D48;
+  --color-field-error-fg: #E11D48;
 }
 
 /* --- The glass itself ---------------------------------------------------
@@ -559,6 +566,22 @@ body {
   border-radius: var(--radius-pill);
   border: 2px solid currentColor;
   border-top-color: transparent;
+}
+
+/* A spinner that does not spin says "frozen", not "working". It is guarded by
+ * the motion preference, which is also what keeps the visual baseline stable:
+ * Playwright renders with `prefers-reduced-motion: reduce`, so the capture
+ * always finds it at rest. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-spinner] {
+    animation: spin 0.7s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 /* Fields ------------------------------------------------------------------ */
