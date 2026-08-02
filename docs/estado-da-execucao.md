@@ -104,6 +104,10 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 
 ### A fazer — E1 · steel thread do motor (não depende da T4)
 
+- [x] **PR-0 · fatia do schema** (#19) — 7 tabelas, schema `internal`, fábricas, 2 suítes de segurança · 3 sabotagens com raio exato
+- [x] **A1 + A2 · ingestão e contadores** (#21) — 5 sabotagens dirigidas · **achado:** a trava contra `max(seq)+1` não existia e foi criada
+- [x] **Unidade 4 · regras do queueing** — backoff/jitter, classificação, weighted polling, promoção por idade, limites por fila · nível `unit` em 0,5s · acaso injetado com trava de fitness própria
+
 - [x] **Fase 0 · plano detalhado** — `docs/plano-e1-steel-thread.md`: fatia do schema, decisão do canal com rota B, escopo negativo
 - [ ] **Fase 1 · especificação vermelha** — A1 ingest_webhook · A2 contadores · A3 lease/CAS · A4 coalescer · A5 claim_outbox_batch · cenários 1–10 · regras do queueing
 - [ ] **Fase 2 · implementação** — migrations 0003+ → ingest_webhook() → filas restantes → queueing → coalescer → lease/CAS → outbox+sender → canal com resposta fixa → heartbeat
