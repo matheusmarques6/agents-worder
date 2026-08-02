@@ -162,12 +162,16 @@ T4 Infra + observabilidade (E0-19 … E0-23)  ──── paralela, com pré-re
 **Objetivo:** rodar N1–N4 em PRs descartáveis e registrar aqui os links dos runs vermelhos.
 **Pronto quando:** as quatro reprovaram pelo motivo certo (não por erro colateral) e os PRs foram fechados sem merge.
 
-| Prova | PR | Run vermelho | Data |
-|---|---|---|---|
-| N1 fronteiras | — | — | — |
-| N2 SQL solto | — | — | — |
-| N3 regressão visual | — | — | — |
-| N4 vazamento RLS | — | — | — |
+| Prova | PR | Run vermelho | Job que reprovou | Data |
+|---|---|---|---|---|
+| N1 fronteiras | [#2](https://github.com/matheusmarques6/agents-worder/pull/2) (fechado) | [30735983063](https://github.com/matheusmarques6/agents-worder/actions/runs/30735983063) | `boundaries` — `agents_runtime.channels -> agents_runtime.connectors (l.10)` | 2026-08-02 |
+| N2 SQL solto | [#3](https://github.com/matheusmarques6/agents-worder/pull/3) (fechado) | [30735947653](https://github.com/matheusmarques6/agents-worder/actions/runs/30735947653) | `tests-py` — `test_module_contains_no_sql[dispatch/__init__.py]`, 1 de 89 | 2026-08-02 |
+| N3 regressão visual | — | — | pendente do E0-17/E0-18 (trilha T3) | — |
+| N4 vazamento RLS | [#4](https://github.com/matheusmarques6/agents-worder/pull/4) (fechado) | [30735956514](https://github.com/matheusmarques6/agents-worder/actions/runs/30735956514) | `tests-py` — 11 falhas da suíte `rls`, todas leitura/escrita cross-tenant | 2026-08-02 |
+
+**Cada uma reprovou sozinha.** Nos três PRs, os outros três jobs passaram — é isso que separa "a trava pegou" de "alguma coisa quebrou". A primeira tentativa da N1 reprovou também no `lint` (um `# noqa: E402` desnecessário virou `RUF100`); a sabotagem foi corrigida e repetida até o vermelho ser só o do `boundaries`.
+
+**Divergência deliberada na N4.** O plano dizia "remover a policy `memberships_worker_scoped`". Remover a policy **fecha** a tabela — o worker deixa de ver qualquer linha — e a suíte reprovaria nas asserções positivas, por privilégio ausente. Privilégio ausente não é prova de RLS. A sabotagem executada foi `alter table public.memberships disable row level security`, que é o que produz leitura cross-tenant de verdade: as 11 falhas são todas do tipo `assert [(UUID(...),)] == []`.
 
 ---
 
