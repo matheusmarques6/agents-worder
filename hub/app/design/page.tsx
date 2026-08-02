@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 
+import { Button } from "@/components/button";
+import { InputField, TextareaField } from "@/components/field";
 import { Glass } from "@/components/glass";
 
+import { ControlsDemo } from "./controls-demo";
 import { ThemeSwitch } from "./theme-switch";
 
 // The showcase — E0-16.
@@ -86,6 +89,16 @@ function Label({ children }: { children: React.ReactNode }) {
  * Opaque on purpose: a blur photographed over a gradient is the least
  * deterministic pixel in the system (R1), and the visual baselines of E0-17
  * have to compare the glass, not the weather behind it. */
+/** A labelled row of variants, the way section 05 lays them out. */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-item desk:flex-row desk:items-center desk:gap-cards">
+      <span className="w-30 shrink-0 font-mono text-label text-fg-subtle">{label}</span>
+      <div className="flex flex-wrap items-center gap-item">{children}</div>
+    </div>
+  );
+}
+
 function Stage({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap gap-cards rounded-card bg-surface-solid p-card">{children}</div>
@@ -262,6 +275,80 @@ const CONTENT: Record<string, React.ReactNode> = {
           ))}
         </div>
       </div>
+    </Stage>
+  ),
+
+  "05": (
+    <Stage>
+      <div className="flex w-full flex-col gap-card">
+        <Row label="primary">
+          <Button data-testid="button-primary">Aprovar e ativar</Button>
+          <Button state="hover">hover</Button>
+          <Button state="pressed">pressed</Button>
+          <Button loading data-testid="button-state-loading">
+            salvando
+          </Button>
+          <Button disabled data-testid="button-state-disabled">
+            desabilitado
+          </Button>
+        </Row>
+
+        <Row label="secondary">
+          <Button variant="secondary">Pausar agente</Button>
+          <Button variant="secondary" state="hover">
+            hover
+          </Button>
+          <Button variant="secondary" state="focus">
+            focus
+          </Button>
+        </Row>
+
+        <Row label="ghost · danger">
+          <Button variant="ghost">Cancelar</Button>
+          <Button variant="danger">Cancelar tenant</Button>
+          <Button variant="danger-strong">Executar purga</Button>
+        </Row>
+
+        <Row label="tamanhos">
+          <Button size="sm" data-testid="button-size-sm">
+            sm · 30
+          </Button>
+          <Button size="md" data-testid="button-size-md">
+            md · 38
+          </Button>
+          <Button size="lg" data-testid="button-size-lg">
+            lg · 48 (mobile)
+          </Button>
+        </Row>
+      </div>
+    </Stage>
+  ),
+
+  "06": (
+    <Stage>
+      <div className="flex w-full max-w-reading flex-col gap-card">
+        <InputField
+          id="campo-nome"
+          label="Nome do agente"
+          defaultValue="Bela"
+          data-testid="field-default-input"
+        />
+        <InputField
+          id="campo-whatsapp"
+          label="WhatsApp"
+          defaultValue="+55 11 9"
+          error
+          help="Número incompleto — use DDD + 9 dígitos."
+          data-testid="field-error-input"
+        />
+        <TextareaField
+          id="campo-abertura"
+          label="Frases de abertura"
+          defaultValue="Oi! Aqui é a Bela da Bella Store 🧡 Em que posso ajudar?"
+        />
+      </div>
+
+      <ControlsDemo />
     </Stage>
   ),
 

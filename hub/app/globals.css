@@ -105,6 +105,113 @@
    * sem blur) para não virar leitosa". */
   --color-glass-nested: rgba(255, 255, 255, 0.045);
 
+  /* --- 05 · Botões ---------------------------------------------------------
+   * Three sizes with their own height, radius and text size, because the
+   * design draws them that way: sm 30, md 38, lg 48 — and lg is what every
+   * primary action becomes on a phone, where 44px is the floor.
+   *
+   * Control text sits between the steps of the type scale (13, 14.5) and so
+   * gets its own role tokens. A scale that components silently ignore is not a
+   * scale; naming the exception keeps it visible.
+   */
+  --spacing-control-sm: 30px;
+  --spacing-control-md: 38px;
+  --spacing-control-lg: 48px;
+
+  --radius-control-sm: 9px;
+  --radius-control-lg: 14px;
+
+  --text-control-sm: 12px;
+  --text-control-md: 13px;
+  --text-control-lg: 14.5px;
+
+  --color-on-brand: #1A0C02;
+  --color-button-primary-from: #FDBA74;
+  --color-button-primary-to: #F97316;
+  --color-button-primary-hover-from: #FCA858;
+  --color-button-primary-hover-to: #EA580C;
+  --color-button-primary-pressed: #EA580C;
+  --shadow-button-primary: 0 8px 22px -8px rgba(249, 115, 22, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-button-primary-hover: 0 4px 14px -6px rgba(249, 115, 22, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  --shadow-button-primary-pressed: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+
+  --color-button-secondary-bg: rgba(255, 255, 255, 0.06);
+  --color-button-secondary-border: rgba(255, 255, 255, 0.11);
+  --color-button-secondary-fg: #EDEDEF;
+  --color-button-secondary-hover-bg: rgba(255, 255, 255, 0.11);
+  --color-button-secondary-hover-border: rgba(255, 255, 255, 0.18);
+  --color-button-secondary-hover-fg: #FFFFFF;
+  --shadow-button-secondary: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --shadow-button-secondary-hover: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+
+  --color-control-disabled-bg: rgba(255, 255, 255, 0.06);
+
+  /* One focus recipe for every control in the system. Focus that differs per
+   * component is focus nobody recognises. */
+  --color-focus-fg: #FFD9BC;
+  --color-focus-bg: rgba(249, 115, 22, 0.14);
+  --color-focus-border: rgba(249, 115, 22, 0.4);
+  --shadow-focus-ring: 0 0 0 3px rgba(249, 115, 22, 0.18);
+
+  /* Two levels of danger, as drawn: the soft one for a reversible destructive
+   * action ("cancelar tenant"), the solid one for the irreversible one
+   * ("executar purga"). Collapsing them would make the two look alike. */
+  --color-danger-soft-bg: rgba(244, 63, 94, 0.10);
+  --color-danger-soft-border: rgba(244, 63, 94, 0.28);
+  --color-danger-soft-fg: #FDA4AF;
+  --color-danger-strong-from: #FB7185;
+  --color-danger-strong-to: #E11D48;
+  --color-on-danger: #3B0713;
+  --shadow-button-danger-strong: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+
+  /* --- 06 · Campos e controles ---------------------------------------------- */
+  --text-field: 13.5px;
+  --text-field-label: 12.5px;
+  --text-field-help: 11.5px;
+  --spacing-textarea: 58px;
+  --radius-choice: 13px;
+
+  --color-field-bg: rgba(255, 255, 255, 0.05);
+  --color-field-border: rgba(255, 255, 255, 0.10);
+  --color-field-label: #C9CACF;
+  --shadow-field: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --color-field-focus-bg: rgba(255, 255, 255, 0.06);
+  --color-field-focus-border: rgba(249, 115, 22, 0.55);
+  --shadow-field-focus-ring: 0 0 0 3px rgba(249, 115, 22, 0.16);
+  --color-field-error-bg: rgba(244, 63, 94, 0.07);
+  --color-field-error-border: rgba(244, 63, 94, 0.5);
+  --color-field-error-fg: #FDA4AF;
+
+  --spacing-toggle-track-w: 44px;
+  --spacing-toggle-track-h: 26px;
+  --spacing-toggle-knob: 20px;
+  --color-toggle-off-bg: rgba(255, 255, 255, 0.10);
+  --color-toggle-off-border: rgba(255, 255, 255, 0.12);
+  --color-toggle-off-knob: #8A8B92;
+  --color-toggle-on-knob: #FFFFFF;
+  --shadow-toggle-on: inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 6px 16px -8px rgba(249, 115, 22, 0.9);
+  --shadow-toggle-knob: 0 1px 3px rgba(0, 0, 0, 0.4);
+
+  --color-choice-bg: rgba(255, 255, 255, 0.045);
+  --color-choice-border: rgba(255, 255, 255, 0.09);
+  --color-choice-fg: #D6D6D9;
+  --color-choice-sub: #75767E;
+  --color-choice-selected-bg: rgba(249, 115, 22, 0.14);
+  --color-choice-selected-border: rgba(249, 115, 22, 0.42);
+  --color-choice-selected-fg: #FFE9D6;
+  --color-choice-selected-sub: #C79972;
+  --shadow-choice-selected: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  --color-chip-bg: rgba(255, 255, 255, 0.05);
+  --color-chip-border: rgba(255, 255, 255, 0.10);
+  --color-chip-fg: #A9AAB2;
+  --color-chip-selected-bg: rgba(249, 115, 22, 0.16);
+  --color-chip-selected-border: rgba(249, 115, 22, 0.36);
+  --color-chip-selected-fg: #FFE9D6;
+
   /* --- 04 · Raio -----------------------------------------------------------
    * 8 chips and small inputs · 12 buttons and nav · 18–22 cards and overlays ·
    * full for pills and avatars. The design draws "full" as 99px; 9999px is the
@@ -196,6 +303,57 @@
    * surface the design already uses on light glass (the incoming chat bubble,
    * seção 12) — same pendency as above. */
   --color-glass-nested: rgba(23, 24, 28, 0.05);
+
+  /* Controls in light — seção 12 draws the primary button, the secondary, the
+   * ghost, the chip and the toggle. Everything else it does not draw reuses
+   * the two recessed values it DOES use in light (`rgba(23,24,28,0.05)` for a
+   * surface, `rgba(23,24,28,0.10)` for a border), same pendency as the glass
+   * above: reuse of an approved value, never an invented one. */
+  --color-on-brand: #FFFFFF;
+  --color-button-primary-from: #FB923C;
+  --color-button-primary-to: #EA580C;
+  --color-button-primary-hover-from: #F97316;
+  --color-button-primary-hover-to: #C2410C;
+  --color-button-primary-pressed: #C2410C;
+  --shadow-button-primary: 0 8px 20px -10px rgba(249, 115, 22, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  --shadow-button-primary-hover: 0 4px 14px -8px rgba(249, 115, 22, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+  --color-button-secondary-bg: rgba(255, 255, 255, 0.9);
+  --color-button-secondary-border: rgba(23, 24, 28, 0.10);
+  --color-button-secondary-fg: #25262B;
+  --color-button-secondary-hover-bg: #FFFFFF;
+  --color-button-secondary-hover-border: rgba(23, 24, 28, 0.18);
+  --color-button-secondary-hover-fg: #17181C;
+  --shadow-button-secondary: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --shadow-button-secondary-hover: inset 0 1px 0 rgba(255, 255, 255, 1);
+
+  --color-control-disabled-bg: rgba(23, 24, 28, 0.05);
+  --color-focus-fg: #9A3412;
+
+  --color-field-bg: rgba(255, 255, 255, 0.9);
+  --color-field-border: rgba(23, 24, 28, 0.10);
+  --color-field-label: #5A5B62;
+  --shadow-field: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --color-field-focus-bg: #FFFFFF;
+
+  --color-toggle-off-bg: rgba(23, 24, 28, 0.05);
+  --color-toggle-off-border: rgba(23, 24, 28, 0.10);
+  --color-toggle-off-knob: #7A7B82;
+  --shadow-toggle-knob: 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  --color-choice-bg: rgba(255, 255, 255, 0.9);
+  --color-choice-border: rgba(23, 24, 28, 0.10);
+  --color-choice-fg: #25262B;
+  --color-choice-sub: #7A7B82;
+  --color-choice-selected-fg: #9A3412;
+  --color-choice-selected-sub: #B45309;
+
+  --color-chip-bg: rgba(255, 255, 255, 0.9);
+  --color-chip-border: rgba(23, 24, 28, 0.10);
+  --color-chip-fg: #5A5B62;
+  --color-chip-selected-fg: #9A3412;
 }
 
 /* --- The glass itself ---------------------------------------------------
@@ -262,4 +420,267 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: var(--text-body);
   line-height: var(--text-body--line-height);
+}
+
+/* --- Controls (05 · 06) ---------------------------------------------------
+ *
+ * Styled by attribute, like the glass: the components hold structure and
+ * behaviour, this file holds every colour, size and shadow. `data-state`
+ * mirrors the pseudo-classes so the showcase can display hover, pressed and
+ * focus side by side — a real hover cannot be captured deterministically, and
+ * a state nobody can see in the showcase is a state nobody reviews.
+ */
+[data-button] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-item);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+[data-button][data-size="sm"] {
+  min-height: var(--spacing-control-sm);
+  padding-inline: var(--spacing-cards);
+  border-radius: var(--radius-control-sm);
+  font-size: var(--text-control-sm);
+}
+[data-button][data-size="md"] {
+  min-height: var(--spacing-control-md);
+  padding-inline: var(--spacing-card);
+  border-radius: var(--radius-control);
+  font-size: var(--text-control-md);
+}
+[data-button][data-size="lg"] {
+  min-height: var(--spacing-control-lg);
+  padding-inline: calc(var(--spacing-section) - var(--spacing-item));
+  border-radius: var(--radius-control-lg);
+  font-size: var(--text-control-lg);
+}
+
+[data-button][data-variant="primary"] {
+  color: var(--color-on-brand);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-button-primary-from),
+    var(--color-button-primary-to)
+  );
+  box-shadow: var(--shadow-button-primary);
+}
+[data-button][data-variant="primary"]:hover:not(:disabled),
+[data-button][data-variant="primary"][data-state="hover"] {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-button-primary-hover-from),
+    var(--color-button-primary-hover-to)
+  );
+  box-shadow: var(--shadow-button-primary-hover);
+}
+[data-button][data-variant="primary"]:active:not(:disabled),
+[data-button][data-variant="primary"][data-state="pressed"] {
+  background-image: none;
+  background-color: var(--color-button-primary-pressed);
+  box-shadow: var(--shadow-button-primary-pressed);
+}
+
+[data-button][data-variant="secondary"] {
+  color: var(--color-button-secondary-fg);
+  background-color: var(--color-button-secondary-bg);
+  border: 1px solid var(--color-button-secondary-border);
+  box-shadow: var(--shadow-button-secondary);
+}
+[data-button][data-variant="secondary"]:hover:not(:disabled),
+[data-button][data-variant="secondary"][data-state="hover"] {
+  color: var(--color-button-secondary-hover-fg);
+  background-color: var(--color-button-secondary-hover-bg);
+  border-color: var(--color-button-secondary-hover-border);
+  box-shadow: var(--shadow-button-secondary-hover);
+}
+
+[data-button][data-variant="ghost"] {
+  color: var(--color-fg-muted);
+}
+[data-button][data-variant="ghost"]:hover:not(:disabled),
+[data-button][data-variant="ghost"][data-state="hover"] {
+  color: var(--color-fg);
+  background-color: var(--color-button-secondary-bg);
+}
+
+[data-button][data-variant="danger"] {
+  color: var(--color-danger-soft-fg);
+  background-color: var(--color-danger-soft-bg);
+  border: 1px solid var(--color-danger-soft-border);
+}
+
+[data-button][data-variant="danger-strong"] {
+  color: var(--color-on-danger);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-danger-strong-from),
+    var(--color-danger-strong-to)
+  );
+  box-shadow: var(--shadow-button-danger-strong);
+}
+
+/* One focus recipe for every control. `:focus-visible` so a click does not
+ * light it up — the ring is for whoever is on a keyboard. */
+[data-button]:focus-visible,
+[data-button][data-state="focus"],
+[data-chip]:focus-visible,
+[data-choice]:focus-visible,
+[data-toggle]:focus-visible {
+  outline: none;
+  color: var(--color-focus-fg);
+  background-image: none;
+  background-color: var(--color-focus-bg);
+  border: 1px solid var(--color-focus-border);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+[data-button]:disabled,
+[data-button][data-state="disabled"] {
+  color: var(--color-fg-disabled);
+  background-image: none;
+  background-color: var(--color-control-disabled-bg);
+  border-color: transparent;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+[data-button][aria-busy="true"] {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+[data-spinner] {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+}
+
+/* Fields ------------------------------------------------------------------ */
+[data-field-label] {
+  font-size: var(--text-field-label);
+  color: var(--color-field-label);
+}
+
+[data-field-control] {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--radius-control);
+  font-size: var(--text-field);
+  color: var(--color-fg);
+  background-color: var(--color-field-bg);
+  border: 1px solid var(--color-field-border);
+  box-shadow: var(--shadow-field);
+}
+textarea[data-field-control] {
+  min-height: var(--spacing-textarea);
+  resize: vertical;
+}
+[data-field-control]:focus,
+[data-field-control][data-state="focus"] {
+  outline: none;
+  background-color: var(--color-field-focus-bg);
+  border-color: var(--color-field-focus-border);
+  box-shadow: var(--shadow-field-focus-ring);
+}
+[data-field-control][aria-invalid="true"] {
+  background-color: var(--color-field-error-bg);
+  border-color: var(--color-field-error-border);
+}
+[data-field-help] {
+  font-size: var(--text-field-help);
+  color: var(--color-fg-subtle);
+}
+[data-field-help][data-tone="error"] {
+  color: var(--color-field-error-fg);
+}
+
+/* Toggle ------------------------------------------------------------------
+ * The switch the design draws is 44x26. The touch target is not the switch:
+ * the button around it carries the 44px minimum height, so the drawing stays
+ * exact and a thumb still lands. */
+[data-toggle] {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--spacing-touch);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+[data-toggle-track] {
+  display: flex;
+  box-sizing: border-box;
+  width: var(--spacing-toggle-track-w);
+  height: var(--spacing-toggle-track-h);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-toggle-off-bg);
+  border: 1px solid var(--color-toggle-off-border);
+}
+[data-toggle][aria-checked="true"] [data-toggle-track] {
+  justify-content: flex-end;
+  background-image: linear-gradient(
+    180deg,
+    var(--color-button-primary-from),
+    var(--color-button-primary-to)
+  );
+  border-color: transparent;
+  box-shadow: var(--shadow-toggle-on);
+}
+[data-toggle-knob] {
+  width: var(--spacing-toggle-knob);
+  height: var(--spacing-toggle-knob);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-toggle-off-knob);
+}
+[data-toggle][aria-checked="true"] [data-toggle-knob] {
+  background-color: var(--color-toggle-on-knob);
+  box-shadow: var(--shadow-toggle-knob);
+}
+
+/* Choice cards and chips -------------------------------------------------- */
+[data-choice] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-chip);
+  padding: var(--spacing-cards);
+  border-radius: var(--radius-choice);
+  text-align: start;
+  color: var(--color-choice-fg);
+  background-color: var(--color-choice-bg);
+  border: 1px solid var(--color-choice-border);
+  cursor: pointer;
+}
+[data-choice][aria-checked="true"] {
+  color: var(--color-choice-selected-fg);
+  background-color: var(--color-choice-selected-bg);
+  border-color: var(--color-choice-selected-border);
+  box-shadow: var(--shadow-choice-selected);
+}
+[data-choice-sub] {
+  font-size: var(--text-field-help);
+  color: var(--color-choice-sub);
+}
+[data-choice][aria-checked="true"] [data-choice-sub] {
+  color: var(--color-choice-selected-sub);
+}
+
+[data-chip] {
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-small);
+  color: var(--color-chip-fg);
+  background-color: var(--color-chip-bg);
+  border: 1px solid var(--color-chip-border);
+  cursor: pointer;
+}
+[data-chip][aria-pressed="true"] {
+  color: var(--color-chip-selected-fg);
+  background-color: var(--color-chip-selected-bg);
+  border-color: var(--color-chip-selected-border);
 }
