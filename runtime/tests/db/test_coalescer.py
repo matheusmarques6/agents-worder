@@ -91,11 +91,13 @@ def test_a_failure_halfway_through_leaves_the_deadline_untouched(
 
 
 def test_a_due_conversation_becomes_exactly_one_job(
-    admin: psycopg.Connection, due_thread: Thread
+    admin: psycopg.Connection, two_tenants: TwoTenants, due_thread: Thread
 ) -> None:
     jobs = coalesce(admin)
 
-    assert jobs == [(due_thread.conversation_id, 1, 3)]
+    # O tenant viaja no job desde a A3: o worker precisa dele antes de tudo,
+    # porque sem SET LOCAL app.tenant_id a RLS não o deixa nem ler a conversa.
+    assert jobs == [(due_thread.conversation_id, 1, 3, two_tenants.a.id)]
 
     generation, deadline_cleared = conversation_state(admin, due_thread.conversation_id)
     assert (generation, deadline_cleared) == (1, True)
@@ -106,6 +108,7 @@ def test_a_due_conversation_becomes_exactly_one_job(
         "conversation_id": str(due_thread.conversation_id),
         "generation": 1,
         "target_seq": 3,
+        "tenant_id": str(two_tenants.a.id),
     }
 
 
