@@ -7,4 +7,4 @@ Evolution). `agent_core` and `dispatch` never send — they write to
 
 # SABOTAGE N1 (plano §E0-12) — este import viola a independência entre
 # channels e connectors. O job `boundaries` tem de reprovar por isto.
-import agents_runtime.connectors  # noqa: E402, F401
+import agents_runtime.connectors  # noqa: F401
