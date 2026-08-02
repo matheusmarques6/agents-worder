@@ -307,6 +307,68 @@
   --color-empty-fg: #C9CACF;
   --color-empty-body: #75767E;
 
+
+  /* --- 10 · Conversa --------------------------------------------------------
+   * The bubble's corners carry the direction: the corner that points at its
+   * author is the small one. That is why the radii are written per corner and
+   * not as a single value.
+   */
+  --radius-bubble: 16px;
+  --radius-bubble-tail: 5px;
+  --text-bubble: 13px;
+  --text-bubble-meta: 10px;
+  --spacing-bubble-max: 78%;
+  --spacing-send: 34px;
+  --radius-send: 11px;
+
+  --color-bubble-in-bg: rgba(255, 255, 255, 0.06);
+  --color-bubble-in-border: rgba(255, 255, 255, 0.09);
+  --color-bubble-in-fg: #E4E4E7;
+
+  --color-bubble-agent-fg: #1A0C02;
+  --shadow-bubble-agent: 0 8px 22px -12px rgba(249, 115, 22, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+  --color-bubble-human-bg: rgba(255, 255, 255, 0.10);
+  --color-bubble-human-border: rgba(255, 255, 255, 0.14);
+  --color-bubble-human-fg: #F4F4F5;
+
+  --color-bubble-meta: #63646C;
+
+  --color-thread-marker-bg: rgba(255, 255, 255, 0.05);
+  --color-thread-marker-border: rgba(255, 255, 255, 0.14);
+  --color-thread-marker-fg: #A9AAB2;
+
+  --color-typing-dot-1: rgba(255, 255, 255, 0.5);
+  --color-typing-dot-2: rgba(255, 255, 255, 0.3);
+  --color-typing-dot-3: rgba(255, 255, 255, 0.18);
+
+  --color-takeover-bg: rgba(249, 115, 22, 0.10);
+  --color-takeover-border: rgba(249, 115, 22, 0.26);
+  --color-takeover-fg: #FFE9D6;
+  --color-takeover-body: #C79972;
+
+  --color-composer-blocked-bg: rgba(255, 255, 255, 0.03);
+  --color-composer-blocked-border: rgba(255, 255, 255, 0.12);
+  --color-composer-blocked-fg: #5F6067;
+
+  /* --- 11 · Sobreposições ---------------------------------------------------
+   * The modal panel is overlay glass exactly as §03 defines it. What is new
+   * here is the scrim behind it and the menu's shorter shadow.
+   */
+  --blur-scrim: 2px;
+  --color-scrim: rgba(8, 9, 12, 0.6);
+  --text-modal-title: 17px;
+  --spacing-modal: 420px;
+  --spacing-menu: 250px;
+  --radius-menu-item: 10px;
+  --shadow-menu: 0 30px 60px -28px rgba(0, 0, 0, 0.95);
+  --color-menu-item-fg: #C9CACF;
+  --color-menu-item-active-bg: rgba(255, 255, 255, 0.08);
+  --color-menu-item-active-fg: #E4E4E7;
+  --color-menu-separator: rgba(255, 255, 255, 0.10);
+  --color-menu-item-danger-fg: #FDA4AF;
+
   /* --- 04 · Raio -----------------------------------------------------------
    * 8 chips and small inputs · 12 buttons and nav · 18–22 cards and overlays ·
    * full for pills and avatars. The design draws "full" as 99px; 9999px is the
@@ -1112,4 +1174,231 @@ textarea[data-field-control] {
   font-size: var(--text-alert-body);
   line-height: 1.5;
   color: var(--color-empty-body);
+}
+
+/* --- Conversation (10) ---------------------------------------------------- */
+[data-thread] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-item);
+}
+
+[data-bubble] {
+  max-width: var(--spacing-bubble-max);
+  padding: 11px 14px;
+  font-size: var(--text-bubble);
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+[data-bubble="inbound"] {
+  align-self: flex-start;
+  border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-bubble)
+    var(--radius-bubble-tail);
+  color: var(--color-bubble-in-fg);
+  background-color: var(--color-bubble-in-bg);
+  border-color: var(--color-bubble-in-border);
+}
+
+[data-outbound] {
+  align-self: flex-end;
+  max-width: var(--spacing-bubble-max);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-chip);
+}
+
+[data-bubble="agent"],
+[data-bubble="human"] {
+  border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-bubble-tail)
+    var(--radius-bubble);
+}
+
+[data-bubble="agent"] {
+  color: var(--color-bubble-agent-fg);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-button-primary-from),
+    var(--color-button-primary-to)
+  );
+  box-shadow: var(--shadow-bubble-agent);
+}
+
+[data-bubble="human"] {
+  color: var(--color-bubble-human-fg);
+  background-color: var(--color-bubble-human-bg);
+  border-color: var(--color-bubble-human-border);
+}
+
+[data-bubble-meta] {
+  font-family: var(--font-mono);
+  font-size: var(--text-bubble-meta);
+  color: var(--color-bubble-meta);
+}
+
+[data-thread-marker] {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-item);
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--text-bubble-meta);
+  color: var(--color-thread-marker-fg);
+  background-color: var(--color-thread-marker-bg);
+  border: 1px dashed var(--color-thread-marker-border);
+}
+[data-thread-marker] > [data-thread-marker-dot] {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-warning);
+}
+
+[data-typing] {
+  align-self: flex-start;
+  display: flex;
+  gap: var(--spacing-chip);
+  padding: 11px 14px;
+  border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-bubble)
+    var(--radius-bubble-tail);
+  background-color: var(--color-bubble-in-bg);
+  border: 1px solid var(--color-bubble-in-border);
+}
+[data-typing] > span {
+  width: var(--spacing-status-dot);
+  height: var(--spacing-status-dot);
+  border-radius: var(--radius-pill);
+}
+[data-typing] > span:nth-child(1) {
+  background-color: var(--color-typing-dot-1);
+}
+[data-typing] > span:nth-child(2) {
+  background-color: var(--color-typing-dot-2);
+}
+[data-typing] > span:nth-child(3) {
+  background-color: var(--color-typing-dot-3);
+}
+
+[data-takeover] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-cards);
+  padding: 14px 16px;
+  border-radius: var(--radius-feedback);
+  color: var(--color-takeover-fg);
+  background-color: var(--color-takeover-bg);
+  border: 1px solid var(--color-takeover-border);
+}
+[data-takeover-body] {
+  font-size: var(--text-field-help);
+  color: var(--color-takeover-body);
+}
+
+/* The composer is chrome glass — it sits at the edge of the conversation the
+ * way a topbar sits at the edge of a screen. */
+[data-composer] {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-cards);
+  padding: 10px 12px;
+  border-radius: var(--radius-feedback);
+}
+[data-composer] [data-field-control] {
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+[data-composer-send] {
+  width: var(--spacing-send);
+  height: var(--spacing-send);
+  min-height: var(--spacing-send);
+  padding: 0;
+  border-radius: var(--radius-send);
+  flex: none;
+}
+[data-composer="blocked"] {
+  color: var(--color-composer-blocked-fg);
+  background-color: var(--color-composer-blocked-bg);
+  border: 1px dashed var(--color-composer-blocked-border);
+  font-size: var(--text-field-label);
+}
+[data-composer="blocked"] [data-field-control] {
+  color: var(--color-composer-blocked-fg);
+}
+
+/* --- Overlays (11) --------------------------------------------------------- */
+[data-modal] {
+  padding: 0;
+  border: none;
+  background: none;
+  max-width: 100%;
+  color: var(--color-fg);
+}
+[data-modal]::backdrop {
+  background-color: var(--color-scrim);
+  backdrop-filter: blur(var(--blur-scrim));
+}
+[data-modal-panel] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card);
+  width: var(--spacing-modal);
+  max-width: 100%;
+  padding: var(--spacing-section) var(--spacing-section);
+}
+[data-modal-title] {
+  font-size: var(--text-modal-title);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+[data-modal-body] {
+  font-size: var(--text-bubble);
+  line-height: 1.55;
+  color: var(--color-alert-success-body);
+}
+[data-modal-actions] {
+  display: flex;
+  gap: var(--spacing-item);
+  justify-content: flex-end;
+}
+
+[data-menu] {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: var(--spacing-menu);
+  max-width: 100%;
+  padding: 7px;
+  border-radius: var(--radius-feedback);
+  box-shadow: var(--shadow-menu);
+}
+[data-menu-item] {
+  padding: 9px 11px;
+  min-height: var(--spacing-touch);
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-menu-item);
+  font-size: var(--text-bubble);
+  color: var(--color-menu-item-fg);
+  background: none;
+  border: none;
+  text-align: start;
+  cursor: pointer;
+}
+[data-menu-item][data-active] {
+  color: var(--color-menu-item-active-fg);
+  background-color: var(--color-menu-item-active-bg);
+}
+[data-menu-item][data-tone="danger"] {
+  color: var(--color-menu-item-danger-fg);
+}
+[data-menu-separator] {
+  height: 1px;
+  margin: 4px 0;
+  background-color: var(--color-menu-separator);
 }

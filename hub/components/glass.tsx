@@ -26,6 +26,20 @@ type GlassProps = ComponentPropsWithoutRef<"div"> & {
   level?: GlassLevel;
 };
 
+/** Where the stacking rule stops applying.
+ *
+ * An overlay opened from inside a card is not stacked on that card: it floats
+ * over the page, and its backdrop-filter samples the page. React context does
+ * not know that — it travels through portals and through the top layer just
+ * the same — so every overlay marks the boundary explicitly, and anything
+ * inside it starts counting from zero again.
+ *
+ * The one legitimate way to escape the rule. A component that reaches for it
+ * without being an overlay is working around the rule, not applying it. */
+export function GlassBoundary({ children }: { children: React.ReactNode }) {
+  return <InsideGlass.Provider value={false}>{children}</InsideGlass.Provider>;
+}
+
 export function Glass({ level = "card", children, ...rest }: GlassProps) {
   const nested = useContext(InsideGlass);
 

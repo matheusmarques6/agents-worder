@@ -14,6 +14,7 @@ import {
 import { Glass } from "@/components/glass";
 
 import { ControlsDemo } from "./controls-demo";
+import { ConversationDemo, OverlayDemo } from "./conversation-demo";
 import { ThemeSwitch } from "./theme-switch";
 
 // The showcase — E0-16.
@@ -428,6 +429,18 @@ const CONTENT: Record<string, React.ReactNode> = {
           <ConnectionStatus>Reconectando ao tempo real…</ConnectionStatus>
         </div>
       </div>
+    </Stage>
+  ),
+
+  "10": (
+    <Stage>
+      <ConversationDemo />
+    </Stage>
+  ),
+
+  "11": (
+    <Stage>
+      <OverlayDemo />
     </Stage>
   ),
 

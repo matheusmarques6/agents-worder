@@ -45,11 +45,20 @@ const EXTENSIONS = [".ts", ".tsx", ".css"];
 const RULES = [
   {
     what: "colour",
-    // 3, 4, 6 or 8 digits — #fff, #fff8, #F97316, #F9731680 — so an id selector
-    // or a URL fragment is not a colour. Plus every functional notation CSS
-    // accepts today; `color-mix` is allowed because it composes tokens.
-    pattern:
-      /(?<![\w#])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w])|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/g,
+    // 3, 4, 6 or 8 digits — #fff, #fff8, #F97316, #F9731680 — plus every
+    // functional notation CSS accepts today. `color-mix` is allowed because it
+    // composes tokens rather than inventing one.
+    //
+    // In TypeScript the hex must sit in a colour-ish context: opened by a
+    // quote, a parenthesis or a property colon. An order number reads as hex
+    // — `pedido #4821` is four valid hex digits — and flagging product copy
+    // teaches people to distrust the check. In CSS the same restriction would
+    // create false negatives (`border: 1px solid #fff` follows a space), so
+    // there the bare form still counts.
+    pattern: (path) =>
+      path.endsWith(".css")
+        ? /(?<![\w#])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w])|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/g
+        : /(?<=["'`(]|:\s{0,4})#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w])|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/g,
     allowed: (path) => path === TOKEN_FILE,
     fix:
       `Use a token from ${TOKEN_FILE} — bg-surface-raised, text-fg-muted, border-brand-500.\n` +
@@ -58,7 +67,7 @@ const RULES = [
   },
   {
     what: "backdrop blur",
-    pattern: /\bbackdrop-(?:filter|blur)\b/g,
+    pattern: () => /\bbackdrop-(?:filter|blur)\b/g,
     allowed: (path) => BLUR_ALLOWED.has(path),
     fix:
       `Use <Glass level="chrome|card|overlay"> from components/glass.tsx.\n` +
@@ -66,6 +75,19 @@ const RULES = [
       `a blur applied by hand is outside that guarantee.`,
   },
 ];
+
+// Prose is not code. A comment explaining WHY a blur belongs to the glass
+// primitive, or naming the hex it replaced, is documentation — flagging it
+// teaches people to stop writing comments, which is the opposite of the point.
+// The same lesson as the AST detectors in the runtime (E0-06); here a
+// line-oriented strip is enough, because the goal is to remove text before
+// searching it, and removing too much can only produce a false negative in a
+// line that mixes a URL and a colour.
+function withoutComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
 
 function* sourceFiles(directory) {
   let entries;
@@ -95,10 +117,10 @@ for (const rule of RULES) {
       const relativePath = relative(HUB, path).split("\\").join("/");
       if (rule.allowed(relativePath)) continue;
 
-      readFileSync(path, "utf8")
+      withoutComments(readFileSync(path, "utf8"))
         .split("\n")
         .forEach((line, index) => {
-          for (const match of line.matchAll(rule.pattern)) {
+          for (const match of line.matchAll(rule.pattern(relativePath))) {
             findings.push(`${relativePath}:${index + 1}  ${match[0]}`);
           }
         });
