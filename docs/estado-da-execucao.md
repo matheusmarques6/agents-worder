@@ -25,32 +25,48 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-06 relógio injetável + fitness | ✅ commit `8771f6f` | `pytest -m unit` 46 verdes · cada trava vista **vermelha** primeiro, contra sabotagem plantada em `dispatch` (relógio) e em `inbox` (SQL) · `ruff check` e `lint-imports` verdes |
 | E0-09 primeira jornada E2E | ✅ commit `c06d122` | `pnpm e2e` 6 verdes (3 asserções × 2 projects) · vista **vermelha** primeiro nos dois viewports · `lint`, `typecheck` e `build` do hub exit 0 |
 
-Próximo item verificável: **E0-10** (`pr.yml`) — mas ver a pergunta em aberto no fim deste arquivo. O **E0-07** e o **E0-08** estão **bloqueados pelo Docker** (§ Bloqueio abaixo) — dá para escrever, não dá para ver vermelho e fechar em verde localmente.
-
-Com o E0-09 verde, a **trilha T3 (design system) está destravada** — ela dependia só do Playwright configurado.
+Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
 
 ---
 
-## Bloqueio ativo: Docker não sobe porque o WSL não existe
+## ~~Bloqueio: Docker não sobe~~ — RESOLVIDO em 2026-08-02
 
-Diagnóstico desta sessão (o reboot não resolveu porque a causa era outra):
+Fica registrado porque o diagnóstico é contraintuitivo e o sintoma pode voltar.
 
-- Docker Desktop **está instalado**, fora do caminho padrão: `D:\docker\Programa\`. O CLI responde (`docker 29.6.2`) e a GUI abre.
-- `com.docker.service` existe mas fica **Stopped** (StartMode Manual).
-- **Causa raiz:** `wsl --version`, `wsl -l -v` e `wsl --status` falham todos com "o sistema não pode encontrar o arquivo especificado". O `wsl.exe` existe em `System32`, mas o WSL em si não está instalado/habilitado — e o Docker Desktop no Windows 11 Home depende do backend WSL2.
-- O último log de instalação (`%LOCALAPPDATA%\Docker\install-log.txt`, 2026‑04‑20) mostra o instalador **cancelado no prompt do UAC**.
+**O que parecia:** `wsl --install` respondia "o sistema não pode encontrar o arquivo especificado", então parecia que faltava instalar o WSL.
 
-**Ação do Bruno (precisa de elevação, não dá para fazer daqui):** abrir o PowerShell **como Administrador** e rodar `wsl --install`, reiniciar, e então abrir o Docker Desktop. Depois disso, `docker ps` responde e o `supabase start` volta a ser possível.
+**O que era:** o WSL estava instalado **pela metade**. Tudo o que se costuma culpar estava certo — recursos `Microsoft-Windows-Subsystem-Linux` e `VirtualMachinePlatform` habilitados, pacote da Store `WindowsSubsystemForLinux` 2.6.2.0 registrado e íntegro, serviço `WSLService` rodando, `HypervisorPresent = True`. O erro real só apareceu chamando o executável direto em vez de pelo atalho do PATH:
+
+```
+Wsl/CallMsi/ERROR_FILE_NOT_FOUND
+```
+
+`CallMsi` é a pista. O WSL tem duas metades: o pacote da Store e um **MSI** que popula `C:\Program Files\WSL\`. O registro dizia que o MSI estava instalado (2.6.2.0), mas a pasta tinha só `wsldeps.dll`, `wslservice.exe` e `wslserviceproxystub.dll` — faltava o `wsl.exe` e todo o resto do payload. Provável resíduo da instalação cancelada no UAC em 2026‑04‑20. E o `wsl --install` não conseguia se consertar porque **o binário que faltava era justamente o que ele precisa executar**.
+
+**O conserto (aplicado):**
+
+```powershell
+winget install --id Microsoft.WSL -e --force --accept-package-agreements --accept-source-agreements
+```
+
+O `--force` é indispensável: sem ele o winget vê o 2.6.2.0 como "já instalado" e sai sem fazer nada — que era exatamente o problema. Resultado: WSL 2.7.11.0, kernel 6.18.33.2-2, `C:\Program Files\WSL` completo. **Não foi preciso reiniciar** (o `VirtualMachinePlatform` já estava ligado antes).
+
+Depois disso o Docker Desktop ainda não subia, por dois motivos independentes:
+
+1. os processos do Docker Desktop tinham ficado presos em estado de falha e nem o `docker desktop restart` os matava (`context deadline exceeded`) — foi preciso `Stop-Process -Force`;
+2. `com.docker.service` estava **Stopped** com StartMode **Manual**. Passou para Automatic e foi iniciado (precisa de elevação).
+
+**Estado final:** `docker ps` responde, daemon 29.6.2 (server e client). Docker Desktop está em `D:\docker\Programa\` — fora do caminho padrão, útil saber se precisar mexer de novo.
 
 ---
 
 ## A retomada, em ordem
 
-1. **`supabase start`** (na raiz do repo), assim que o Docker subir — primeira execução baixa as imagens, demora. É aqui que se fecha o risco R2 do plano: confirmar que a imagem local traz **pgmq** e **pgvector**. Se não trouxer, vale o plano B do E0-04 (serviço Postgres próprio no CI com as extensões).
-2. **E0-09** — jornada Playwright na home do hub, nos dois viewports. **Não depende de Docker**; é o próximo item a executar enquanto o WSL não existe. Destrava a trilha T3.
-3. **E0-10/E0-11** — `pr.yml` e `main.yml`. Também não dependem do Docker local: o Postgres efêmero é serviço do GitHub Actions. Ter o CI de pé é o caminho alternativo para ver o E0-07 vermelho→verde sem Docker na máquina.
-4. **E0-07** — migration `0001` (`tenants`, `profiles`, `memberships` conforme `core/dicionario-de-dados.md` §1.1–1.3), roles `worker_role`/`sender_role` sem BYPASSRLS, políticas RLS nos três caminhos. O teste de vazamento é escrito **antes** da policy, para vazar de verdade e só então fechar. **Não aplicar no projeto hospedado** — ele é o único que existe e o B-5 (ambiente de staging) segue indefinido.
-5. **E0-08** pgmq · **E0-12** as quatro provas negativas (a N1 e a N2 já têm mecanismo pronto e visto reprovando localmente; falta o registro em PR descartável).
+1. **`supabase start`** (na raiz do repo) — primeira execução baixa as imagens, demora. É aqui que se fecha o risco R2 do plano: confirmar que a imagem local traz **pgmq** e **pgvector**. Se não trouxer, vale o plano B do E0-04 (serviço Postgres próprio no CI com as extensões).
+2. **E0-07** — migration `0001` (`tenants`, `profiles`, `memberships` conforme `core/dicionario-de-dados.md` §1.1–1.3), roles `worker_role`/`sender_role` sem BYPASSRLS, políticas RLS nos três caminhos. O teste de vazamento é escrito **antes** da policy, para vazar de verdade e só então fechar. **Não aplicar no projeto hospedado** — ele é o único que existe e o B-5 (ambiente de staging) segue indefinido.
+3. **E0-08** — pgmq real (`send` → `read(vt)` → `archive`) + esqueleto do laço do runtime.
+4. **E0-10/E0-11** — `pr.yml` e `main.yml`. Precisa de push (ver decisão 11).
+5. **E0-12** — as quatro provas negativas (a N1 e a N2 já têm mecanismo pronto e visto reprovando localmente; falta o registro em PR descartável).
 
 ---
 
@@ -64,8 +80,8 @@ Diagnóstico desta sessão (o reboot não resolveu porque a causa era outra):
 | pnpm | 11.18.0 | instalado nesta sessão (`npm i -g`) |
 | uv | 0.11.32 | instalado nesta sessão (winget, escopo de usuário) |
 | supabase CLI | 2.111.0 | instalado nesta sessão (`npm i -g`) |
-| docker CLI | 29.6.2 | `D:\docker\Programa\resources\bin\docker.exe` |
-| **daemon docker** | — | **bloqueado — WSL ausente (ver § Bloqueio)** |
+| docker | 29.6.2 | Docker Desktop em `D:\docker\Programa\` (fora do caminho padrão) |
+| WSL | 2.7.11.0 · kernel 6.18.33.2-2 | reinstalado nesta sessão (winget `--force`) |
 
 Projeto Supabase hospedado: `agents-worder` / `jmzsxwtflxsrdfjkuusi`, sa-east-1, Postgres 17.6.1, **sem nenhuma migration aplicada**. `pgmq` 1.5.1 e `vector` 0.8.2 disponíveis; `supabase_vault` 0.3.1 já instalado.
 
