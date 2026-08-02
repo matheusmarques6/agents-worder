@@ -23,8 +23,11 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | Item | Estado | Prova executada |
 |---|---|---|
 | E0-06 relógio injetável + fitness | ✅ commit `8771f6f` | `pytest -m unit` 46 verdes · cada trava vista **vermelha** primeiro, contra sabotagem plantada em `dispatch` (relógio) e em `inbox` (SQL) · `ruff check` e `lint-imports` verdes |
+| E0-09 primeira jornada E2E | ✅ commit `c06d122` | `pnpm e2e` 6 verdes (3 asserções × 2 projects) · vista **vermelha** primeiro nos dois viewports · `lint`, `typecheck` e `build` do hub exit 0 |
 
-Próximo item verificável: **E0-09** (jornada E2E). O **E0-07** e o **E0-08** estão **bloqueados pelo Docker** (§ Bloqueio abaixo) — dá para escrever, não dá para ver vermelho e fechar em verde localmente.
+Próximo item verificável: **E0-10** (`pr.yml`) — mas ver a pergunta em aberto no fim deste arquivo. O **E0-07** e o **E0-08** estão **bloqueados pelo Docker** (§ Bloqueio abaixo) — dá para escrever, não dá para ver vermelho e fechar em verde localmente.
+
+Com o E0-09 verde, a **trilha T3 (design system) está destravada** — ela dependia só do Playwright configurado.
 
 ---
 
@@ -81,6 +84,8 @@ Ficam registradas aqui porque mudam como o código se comporta:
 7. **Detecção por AST, não por regex**, nas duas travas do E0-06. Uma docstring que cita `SELECT max(seq)+1` não é violação; `from time import sleep as nap; nap(30)` é. Cada detector carrega os próprios testes, para que a trava não apodreça em decoração que sempre passa.
 8. **`FrozenClock` mora em `runtime/tests/support/`, não no pacote do runtime.** Duplo de teste não viaja na imagem de produção. O `agents_runtime/clock.py` é o único arquivo autorizado a ler o relógio real — é assim que a trava está escrita.
 9. **`runtime/tests/` virou pacote** (`__init__.py` em `tests/`, `tests/unit/`, `tests/support/`). Sem isso, `tests.support` não importa e dois arquivos de teste com o mesmo nome em níveis diferentes colidiriam.
+10. **A home do hub é placeholder deliberado.** O E0 não entrega tela desenhada; a jornada do E0-09 afirma só `data-testid="hub-home"`, título, `lang` e ausência de rolagem horizontal — marcadores escolhidos para sobreviver à reconstrução da página sobre o design system na T3, sem editar o teste. Os assets do `create-next-app` foram removidos junto.
+11. **Nada foi empurrado para o GitHub ainda.** Os três commits vivem só na `e0-foundation` local. O `pr.yml` só pode ser verificado depois de um push — decisão do Bruno.
 
 ---
 
