@@ -34,6 +34,8 @@ const SECTIONS = [
   { id: "06", name: "campos-e-controles" },
   { id: "07", name: "status-e-feedback" },
   { id: "10", name: "conversa" },
+  { id: "08", name: "navegacao" },
+  { id: "09", name: "dados" },
   { id: "11", name: "sobreposicoes" },
 ];
 

@@ -244,9 +244,9 @@
   --color-status-paused-fg: #C9CACF;
   --color-status-paused-dot: #8A8B92;
 
-  --color-status-pending-bg: rgba(250, 204, 21, 0.10);
-  --color-status-pending-border: rgba(250, 204, 21, 0.26);
-  --color-status-pending-fg: #FDE68A;
+  --color-status-onboarding-bg: rgba(250, 204, 21, 0.10);
+  --color-status-onboarding-border: rgba(250, 204, 21, 0.26);
+  --color-status-onboarding-fg: #FDE68A;
 
   /* Dashed on purpose: shadow mode is temporary, and the border says so
    * without needing a legend. */
@@ -368,6 +368,64 @@
   --color-menu-item-active-fg: #E4E4E7;
   --color-menu-separator: rgba(255, 255, 255, 0.10);
   --color-menu-item-danger-fg: #FDA4AF;
+
+
+  /* --- 08 · Navegação -------------------------------------------------------
+   * Sidebar, topbar and the mobile tab bar are all `chrome` glass as §03
+   * defines it. The topbar in §08 is drawn a few thousandths lighter
+   * (.07→.028 against .075→.03); that difference is below what anyone can see
+   * and above what a fourth glass level would be worth, so the canonical
+   * recipe wins and the divergence is recorded.
+   */
+  --text-nav: 13.5px;
+  --text-tab: 12.5px;
+  --text-tabbar: 10.5px;
+  --text-group: 9.5px;
+  --radius-segment: 9px;
+  --spacing-tabbar-icon: 16px;
+  --radius-tabbar-icon: 5px;
+
+  --color-nav-fg: #A9AAB2;
+  --color-nav-hover-bg: rgba(255, 255, 255, 0.05);
+  --color-nav-hover-fg: #D6D6D9;
+  --color-nav-active-from: rgba(249, 115, 22, 0.22);
+  --color-nav-active-to: rgba(249, 115, 22, 0.06);
+  --color-nav-active-border: rgba(249, 115, 22, 0.32);
+  --color-nav-active-fg: #FFF3E9;
+  --shadow-nav-active-dot: 0 0 12px #F97316;
+  --color-nav-group: #63646C;
+
+  --color-switcher-bg: rgba(255, 255, 255, 0.05);
+  --color-switcher-border: rgba(255, 255, 255, 0.08);
+  --color-switcher-label: #75767E;
+  --color-switcher-name: #E8E8EA;
+
+  --color-segment-bg: rgba(255, 255, 255, 0.05);
+  --color-segment-border: rgba(255, 255, 255, 0.09);
+  --color-segment-fg: #8A8B93;
+  --color-segment-active-bg: rgba(255, 255, 255, 0.10);
+  --color-segment-active-fg: #EDEDEF;
+  --shadow-segment-active: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+
+  --color-tabbar-active-bg: rgba(249, 115, 22, 0.18);
+  --color-tabbar-active-border: rgba(249, 115, 22, 0.32);
+  --color-tabbar-active-fg: #FFE9D6;
+  --color-tabbar-icon: rgba(255, 255, 255, 0.22);
+  --color-tabbar-fg: #8A8B92;
+
+  /* --- 09 · Dados ----------------------------------------------------------- */
+  --text-table: 12.5px;
+  --text-table-head: 10px;
+  --radius-pager: 8px;
+
+  --color-table-head: #63646C;
+  --color-table-head-border: rgba(255, 255, 255, 0.07);
+  --color-table-row-fg: #D6D6D9;
+  --color-table-row-muted: #8A8B93;
+  --color-table-row-border: rgba(255, 255, 255, 0.05);
+  --color-table-row-hover: rgba(255, 255, 255, 0.03);
+  --color-pager-border: rgba(255, 255, 255, 0.10);
+  --color-pager-fg: #8A8B92;
 
   /* --- 04 · Raio -----------------------------------------------------------
    * 8 chips and small inputs · 12 buttons and nav · 18–22 cards and overlays ·
@@ -541,7 +599,7 @@
   --color-status-paused-fg: #5A5B62;
   --color-status-paused-dot: #7A7B82;
 
-  --color-status-pending-fg: #17181C;
+  --color-status-onboarding-fg: #17181C;
   --color-status-shadow-bg: rgba(23, 24, 28, 0.04);
   --color-status-shadow-fg: #9A3412;
   --color-status-cancelled-fg: #E11D48;
@@ -614,6 +672,42 @@
   --color-menu-item-active-fg: #17181C;
   --color-menu-separator: rgba(23, 24, 28, 0.10);
   --color-menu-item-danger-fg: #E11D48;
+
+  /* Navigation and data in light — the fourth lot, the same cause (decisão 49).
+   * Here it was the store name, the current sidebar item and the selected
+   * period that vanished. Recessed surfaces the design already uses in light,
+   * text dark enough to read, brand text at the approved #9A3412. */
+  --color-nav-fg: #5A5B62;
+  --color-nav-hover-bg: rgba(23, 24, 28, 0.05);
+  --color-nav-hover-fg: #17181C;
+  --color-nav-active-fg: #9A3412;
+  --color-nav-group: #7A7B82;
+  --shadow-nav-active-dot: none;
+
+  --color-switcher-bg: rgba(23, 24, 28, 0.04);
+  --color-switcher-border: rgba(23, 24, 28, 0.08);
+  --color-switcher-label: #7A7B82;
+  --color-switcher-name: #17181C;
+
+  --color-segment-bg: rgba(23, 24, 28, 0.04);
+  --color-segment-border: rgba(23, 24, 28, 0.09);
+  --color-segment-fg: #5A5B62;
+  --color-segment-active-bg: #FFFFFF;
+  --color-segment-active-fg: #17181C;
+  --shadow-segment-active: inset 0 1px 0 rgba(255, 255, 255, 1);
+
+  --color-tabbar-active-fg: #9A3412;
+  --color-tabbar-icon: rgba(23, 24, 28, 0.22);
+  --color-tabbar-fg: #5A5B62;
+
+  --color-table-head: #7A7B82;
+  --color-table-head-border: rgba(23, 24, 28, 0.09);
+  --color-table-row-fg: #25262B;
+  --color-table-row-muted: #5A5B62;
+  --color-table-row-border: rgba(23, 24, 28, 0.06);
+  --color-table-row-hover: rgba(23, 24, 28, 0.03);
+  --color-pager-border: rgba(23, 24, 28, 0.10);
+  --color-pager-fg: #5A5B62;
 }
 
 /* --- The glass itself ---------------------------------------------------
@@ -1003,12 +1097,12 @@ textarea[data-field-control] {
   background-color: var(--color-status-paused-dot);
 }
 
-[data-status="pending_approval"] {
-  color: var(--color-status-pending-fg);
-  background-color: var(--color-status-pending-bg);
-  border-color: var(--color-status-pending-border);
+[data-status="onboarding"] {
+  color: var(--color-status-onboarding-fg);
+  background-color: var(--color-status-onboarding-bg);
+  border-color: var(--color-status-onboarding-border);
 }
-[data-status="pending_approval"] [data-status-dot] {
+[data-status="onboarding"] [data-status-dot] {
   background-color: var(--color-warning);
 }
 
@@ -1440,4 +1534,225 @@ textarea[data-field-control] {
   height: 1px;
   margin: 4px 0;
   background-color: var(--color-menu-separator);
+}
+
+/* --- Navigation (08) -------------------------------------------------------
+ *
+ * The breakpoint decides which block exists. Both are always rendered and CSS
+ * hides one — a JS-switched layout would make the viewport tests pass while
+ * proving nothing about the stylesheet a merchant actually gets.
+ */
+[data-sidebar] {
+  display: none;
+  flex-direction: column;
+  gap: var(--spacing-card);
+  width: var(--spacing-sidebar);
+  flex: none;
+  padding: 20px 16px;
+}
+
+[data-tabbar] {
+  display: flex;
+  gap: var(--spacing-item);
+  padding: 10px;
+  border-radius: var(--radius-card);
+}
+
+@media (width >= 860px) {
+  [data-sidebar] {
+    display: flex;
+  }
+  [data-tabbar] {
+    display: none;
+  }
+}
+
+[data-switcher] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-item);
+  padding: 9px 11px;
+  border-radius: var(--radius-control);
+  background-color: var(--color-switcher-bg);
+  border: 1px solid var(--color-switcher-border);
+}
+[data-switcher-label] {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-switcher-label);
+}
+[data-switcher-name] {
+  font-size: var(--text-bubble);
+  font-weight: 500;
+  color: var(--color-switcher-name);
+}
+
+[data-nav-group] {
+  font-family: var(--font-mono);
+  font-size: var(--text-group);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-nav-group);
+  padding: 0 12px;
+}
+
+[data-nav-item] {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  font-size: var(--text-nav);
+  color: var(--color-nav-fg);
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+[data-nav-item]:hover {
+  color: var(--color-nav-hover-fg);
+  background-color: var(--color-nav-hover-bg);
+}
+[data-nav-item][aria-current="page"] {
+  color: var(--color-nav-active-fg);
+  font-weight: 500;
+  background-image: linear-gradient(
+    90deg,
+    var(--color-nav-active-from),
+    var(--color-nav-active-to)
+  );
+  border-color: var(--color-nav-active-border);
+}
+[data-nav-dot] {
+  width: var(--spacing-status-dot);
+  height: var(--spacing-status-dot);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-brand-500);
+  box-shadow: var(--shadow-nav-active-dot);
+  flex: none;
+}
+
+[data-topbar] {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-cards);
+  padding: 12px 16px;
+  border-radius: var(--radius-card);
+}
+
+[data-segment] {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-control);
+  background-color: var(--color-segment-bg);
+  border: 1px solid var(--color-segment-border);
+}
+[data-segment-item] {
+  padding: 7px 13px;
+  border-radius: var(--radius-segment);
+  font-size: var(--text-tab);
+  color: var(--color-segment-fg);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+[data-segment-item][aria-pressed="true"] {
+  color: var(--color-segment-active-fg);
+  background-color: var(--color-segment-active-bg);
+  box-shadow: var(--shadow-segment-active);
+}
+
+[data-tabbar-item] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: var(--spacing-touch);
+  padding: 8px 0;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  font-size: var(--text-tabbar);
+  color: var(--color-tabbar-fg);
+  background: none;
+  cursor: pointer;
+}
+[data-tabbar-icon] {
+  width: var(--spacing-tabbar-icon);
+  height: var(--spacing-tabbar-icon);
+  border-radius: var(--radius-tabbar-icon);
+  background-color: var(--color-tabbar-icon);
+}
+[data-tabbar-item][aria-current="page"] {
+  color: var(--color-tabbar-active-fg);
+  background-color: var(--color-tabbar-active-bg);
+  border-color: var(--color-tabbar-active-border);
+}
+[data-tabbar-item][aria-current="page"] [data-tabbar-icon] {
+  background-color: var(--color-brand-500);
+}
+
+/* --- Data table (09) -------------------------------------------------------- */
+[data-table] {
+  width: 100%;
+  border-collapse: collapse;
+}
+[data-table] th {
+  font-family: var(--font-mono);
+  font-size: var(--text-table-head);
+  font-weight: 400;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  text-align: start;
+  color: var(--color-table-head);
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--color-table-head-border);
+}
+[data-table] td {
+  padding: 11px 4px;
+  font-size: var(--text-table);
+  color: var(--color-table-row-fg);
+  border-bottom: 1px solid var(--color-table-row-border);
+}
+[data-table] tbody tr:last-child td {
+  border-bottom: none;
+}
+[data-table] tbody tr:hover td {
+  background-color: var(--color-table-row-hover);
+}
+[data-table-cell="muted"] {
+  color: var(--color-table-row-muted);
+}
+[data-table-cell="numeric"] {
+  font-family: var(--font-mono);
+  color: var(--color-table-row-muted);
+}
+
+[data-pagination] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-cards);
+  padding-top: var(--spacing-cards);
+  margin-top: 6px;
+  border-top: 1px solid var(--color-table-head-border);
+}
+[data-pagination-count] {
+  font-family: var(--font-mono);
+  font-size: var(--text-badge);
+  color: var(--color-table-head);
+}
+[data-pagination] [data-button] {
+  padding-inline: 10px;
+  min-height: 0;
+  padding-block: 5px;
+  border-radius: var(--radius-pager);
+  border: 1px solid var(--color-pager-border);
+  color: var(--color-pager-fg);
+  font-size: var(--text-small);
 }
