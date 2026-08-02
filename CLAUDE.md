@@ -132,7 +132,7 @@ Visual comparisons are **skipped locally on purpose** (`ignoreSnapshots` when `C
 | Command | What it does |
 |---|---|
 | `supabase start` | full local stack (Postgres on :54322, Studio on :54323) |
-| `supabase start -x "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"` | Postgres + GoTrue only — what the `db`/`rls` suites actually need. Two containers instead of fourteen. Quote the list: PowerShell parses an unquoted comma-separated value as an array and silently drops all but the first name |
+| `supabase start -x "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"` | Postgres + GoTrue only — what the `db`/`rls`/`pipeline` suites actually need. Two containers instead of fourteen. Quote the list: PowerShell parses an unquoted comma-separated value as an array and silently drops all but the first name |
 | `supabase db reset` | drop, recreate and re-apply every migration |
 | `supabase migration new <name>` | new migration file |
 | `supabase stop` | tear the local stack down |

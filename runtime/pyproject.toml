@@ -3,7 +3,14 @@ name = "agents-runtime"
 version = "0.1.0"
 description = "WhatsApp AI agents runtime — workers, coalescer, scheduler and senders as tasks of a single asyncio process."
 requires-python = ">=3.13"
-dependencies = []
+# Postgres is the only thing the runtime talks to directly (ADR-01), so psycopg3
+# is the one production dependency the queue transport needs. It is also what
+# `obs` will instrument later (observabilidade §3, instrument_psycopg), so the
+# test harness and the runtime speak to the database through the same driver
+# rather than two.
+dependencies = [
+    "psycopg[binary]>=3.2",
+]
 
 [dependency-groups]
 dev = [
@@ -12,11 +19,6 @@ dev = [
     "freezegun>=1.5",
     "ruff>=0.14",
     "import-linter>=2.3",
-    # The `db`/`rls` levels talk to a real Postgres. psycopg3 is also what
-    # `obs` will instrument later (observabilidade §3, instrument_psycopg), so
-    # the test harness and the runtime speak to the database through the same
-    # driver rather than two.
-    "psycopg[binary]>=3.2",
 ]
 
 [build-system]

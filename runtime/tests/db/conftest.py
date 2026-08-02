@@ -8,7 +8,6 @@ Test data uses a per-run prefix (core/testes-e-cicd.md §3.3 item 15) so two
 runs against the same database cannot collide, and teardown removes it.
 """
 
-import os
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -17,8 +16,7 @@ from dataclasses import dataclass
 import psycopg
 import pytest
 
-# The port the Supabase CLI binds locally (supabase/config.toml [db].port).
-DEFAULT_DSN = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+from tests.support.database import dsn_from_env
 
 # SET ROLE cannot take a bound parameter, so the role name is never allowed to
 # come from data — only from this list.
@@ -27,7 +25,7 @@ APP_ROLES = ("worker_role", "sender_role")
 
 @pytest.fixture(scope="session")
 def dsn() -> str:
-    return os.environ.get("SUPABASE_DB_URL", DEFAULT_DSN)
+    return dsn_from_env()
 
 
 @pytest.fixture

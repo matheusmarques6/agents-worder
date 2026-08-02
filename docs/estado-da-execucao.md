@@ -25,8 +25,11 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-06 relógio injetável + fitness | ✅ commit `8771f6f` | `pytest -m unit` 46 verdes · cada trava vista **vermelha** primeiro, contra sabotagem plantada em `dispatch` (relógio) e em `inbox` (SQL) · `ruff check` e `lint-imports` verdes |
 | E0-09 primeira jornada E2E | ✅ commit `c06d122` | `pnpm e2e` 6 verdes (3 asserções × 2 projects) · vista **vermelha** primeiro nos dois viewports · `lint`, `typecheck` e `build` do hub exit 0 |
 | E0-07 migration 0001 + suíte `rls` | ✅ commit `cc6406a` | `pytest -m "unit or db"` 70 verdes · vazamento visto **vermelho** com as três credenciais · N4 confirmada no gate final (desligar RLS só em `memberships` reprova 10 dos 24) · **R2 fechado**: imagem local traz `pgmq` 1.5.1 e `vector` 0.8.2 |
+| E0-08 pgmq real + esqueleto do laço | ✅ | `pytest -m pipeline` 9 verdes · cada arquivo visto **vermelho** primeiro (módulo inexistente) · `-m "unit or db"` 89 verdes · a suíte de exposição da fila provada nos dois sentidos por sabotagem (ver decisão 20) · `ruff check` e `lint-imports` verdes |
 
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
+
+O E0-08 fecha o nível `pipeline`: existe agora **um teste real de cada nível** (`unit`, `db`, `rls`, `pipeline`, E2E), que é a primeira das oito provas do §12 do plano — falta só rodá-los no CI.
 
 ---
 
@@ -63,10 +66,9 @@ Depois disso o Docker Desktop ainda não subia, por dois motivos independentes:
 
 ## A retomada, em ordem
 
-1. **E0-08** — pgmq real (`send` → `read(vt)` → `archive`) + esqueleto do laço do runtime, desligando graciosamente sem deixar mensagem em limbo. É o nível `pipeline`, ainda sem nenhum teste.
-2. **E0-10/E0-11** — `pr.yml` e `main.yml`. Precisa de push (ver decisão 11).
-3. **E0-12** — registrar as quatro provas negativas em PR descartável. As quatro já foram vistas reprovando **localmente** (N1 pelo import-linter, N2 e a do relógio no `-m unit`, N4 no `-m rls`); falta só a N3, que depende da trilha T3, e o registro formal com link de run.
-4. **Trilha T3** (E0-13 tokens → E0-18) — destravada desde o E0-09.
+1. **E0-10/E0-11** — `pr.yml` e `main.yml`. Precisa de push (ver decisão 11). O `main.yml` soma `-m pipeline`, que agora existe.
+2. **E0-12** — registrar as quatro provas negativas em PR descartável. As quatro já foram vistas reprovando **localmente** (N1 pelo import-linter, N2 e a do relógio no `-m unit`, N4 no `-m rls`); falta só a N3, que depende da trilha T3, e o registro formal com link de run.
+3. **Trilha T3** (E0-13 tokens → E0-18) — destravada desde o E0-09.
 
 Lembrete que não muda: **nada disso toca o projeto hospedado.** Ele segue sem migration aplicada até o B-5 (ambiente de staging) estar decidido.
 
@@ -108,8 +110,15 @@ Ficam registradas aqui porque mudam como o código se comporta:
 13. **As policies vão na mesma migration das tabelas**, não numa migration seguinte. Tabela que existe por uma migration que seja com GRANT e sem policy foi legível cross-tenant em algum ponto da história do schema. O ciclo vermelho→verde aconteceu de verdade — a suíte rodou contra as tabelas com GRANT e sem policy e foi vista retornando linhas do tenant errado —, mas a prova mora na mensagem do commit `cc6406a`, não numa migration permanentemente insegura.
 14. **Roles `nologin`.** Pool separado exige senha, e senha em migration commitada é segredo vazado; o grant de login fica fora de banda, por ambiente. `grant worker_role, sender_role to postgres` existe para o `postgres` conseguir assumi-los (`SET ROLE`) — não concede nada aos roles.
 15. **Revisão de código pós-E0-07 (2026-08-02) fechou cinco achados**, cada um com teste vermelho visto primeiro (77 verdes ao final): `current_app_tenant_id()` agora falha fechado também para valor **imparseável** (plpgsql + `exception when invalid_text_representation` — antes o cast `::uuid` virava erro em toda query da conexão, e o comentário prometia NULL); `tenants.updated_at` passou a mover por trigger (`touch_updated_at`, reutilizável pelas próximas tabelas); o detector de relógio rastreia alias de módulo/classe (`import time as t`, `from datetime import datetime as dt`); nasceu `agents_runtime/__main__.py` (o CMD da imagem existia sem alvo — o container buildava e morria no primeiro start) com fitness test de que o alvo do CMD existe; e o harness de `db`/`rls` passou a escopar `app.tenant_id` e `request.jwt.claims` por **transação** (`is_local => true`), espelhando a disciplina `SET LOCAL` que o driver real usará no E0-08. A migration 0001 foi editada em vez de criar uma segunda — nada foi implantado em lugar nenhum, mesma lógica da decisão 13.
-
 16. **O primeiro vermelho do E0-07 foi rejeitado.** 11 das 16 falhas eram `permission denied to set role` e `permission denied for table` — isso testa o GRANT, não a policy. Só depois de conceder privilégio de tabela aos três caminhos o vazamento pôde acontecer de fato. Vale a regra geral: **falha por privilégio ausente não é prova de RLS.**
+17. **Uma fila, não quatro.** A migration 0002 cria `pgmq` e só `q_inbound`. As outras três (`q_domain_events`, `q_scheduled`, `q_evals`) e os DLQs nascem no E1 junto do weighted polling que lhes dá sentido — fila que ninguém lê é fila que ninguém testa.
+18. **O handler do E0 recusa o job, não o engole.** O `__main__` passa um handler que levanta `NotImplementedError`: o processo sobe, faz polling de fila vazia e morre alto se aparecer trabalho de verdade. Um no-op que arquivasse o que lesse seria exatamente o modo de falha que este marco existe para excluir — job que some sem ninguém ver. Pela mesma razão, o laço **não** arquiva quando o handler falha (backoff/DLQ são E1); o teste afirma que a mensagem continua na fila.
+19. **O laço só pode parar entre jobs.** `run()` checa o desligamento no topo do ciclo; da reivindicação em diante, arquivar é a única saída. Assim "parar de reivindicar, terminar o que está na mão" não precisa decidir o que fazer com meio job — e deploy é rotina, não exceção.
+20. **A suíte de exposição da fila foi provada nos dois sentidos.** Ela passou de primeira, o que não prova nada — então foi sabotada: `grant select on pgmq.q_q_inbound to authenticated` reprovou **exatamente** o caso `authenticated` (e só ele), e `revoke insert ... from worker_role` reprovou o teste positivo. Banco restaurado com `supabase db reset` em seguida. Vale como regra: **teste de fronteira que nunca foi visto vermelho é decoração.**
+21. **A fila é dirigida como `worker_role` nos testes, não como superusuário.** O fixture faz `set role worker_role` antes de entregar a `PgmqQueue`. Rodar como `postgres` passaria com qualquer grant, e o primeiro privilégio a faltar em produção seria um que a suíte nunca exercitou.
+22. **Isolamento do nível `pipeline` é por purga, não por prefixo.** Fila é estado compartilhado, não linha: cada teste começa e termina com `q_inbound` vazia. O prefixo por run que o nível `db` usa não se aplica.
+23. **`psycopg` virou dependência de produção** (era só de desenvolvimento). A imagem instala com `--no-dev`; sem a mudança, o container subiria sem o driver que o laço agora importa.
+24. **Windows precisa do selector loop** para as conexões assíncronas do psycopg. O `tests/pipeline/conftest.py` implementa o hook `pytest_asyncio_loop_factories` (a API antiga, `event_loop_policy`, está deprecada no pytest-asyncio 1.x) e só na máquina de desenvolvimento — em Linux o selector já é o padrão.
 
 ---
 
