@@ -456,6 +456,63 @@
    * danger button's end stop), so it is reuse, not a new colour. */
   --color-danger-soft-fg: #E11D48;
   --color-field-error-fg: #E11D48;
+
+  /* Status and feedback in light.
+   *
+   * The dark palette puts pale text on a dark tint; on a light surface the
+   * same pale text disappears — the first light baseline of this lot showed
+   * "ativo", "em aprovação" and the toast title as ghosts. So light keeps the
+   * TINT and the DOT as the semantic channel and darkens the text.
+   *
+   * Where the design draws the light value, it is transcribed: the active pill
+   * of seção 12 is exactly #9A3412 on rgba(249,115,22,0.12). Where it does not,
+   * the text falls back to `--color-fg` / `--color-fg-muted` rather than to an
+   * invented dark yellow or dark green. What is missing from the design is
+   * listed in the pendências of docs/estado-da-execucao.md. */
+  --color-status-active-bg: rgba(249, 115, 22, 0.12);
+  --color-status-active-border: rgba(249, 115, 22, 0.28);
+  --color-status-active-fg: #9A3412;
+  --shadow-status-active-dot: none;
+
+  --color-status-paused-bg: rgba(23, 24, 28, 0.05);
+  --color-status-paused-border: rgba(23, 24, 28, 0.10);
+  --color-status-paused-fg: #5A5B62;
+  --color-status-paused-dot: #7A7B82;
+
+  --color-status-pending-fg: #17181C;
+  --color-status-shadow-bg: rgba(23, 24, 28, 0.04);
+  --color-status-shadow-fg: #9A3412;
+  --color-status-cancelled-fg: #E11D48;
+
+  --color-tech-strong-bg: rgba(23, 24, 28, 0.05);
+  --color-tech-strong-border: rgba(23, 24, 28, 0.10);
+  --color-tech-strong-fg: #25262B;
+  --color-tech-neutral-bg: rgba(23, 24, 28, 0.04);
+  --color-tech-neutral-border: rgba(23, 24, 28, 0.09);
+  --color-tech-neutral-fg: #5A5B62;
+  --color-tech-success-fg: #17181C;
+  --color-tech-danger-fg: #E11D48;
+
+  --color-alert-success-fg: #17181C;
+  --color-alert-success-body: #5A5B62;
+  --color-alert-warning-fg: #17181C;
+  --color-alert-warning-body: #5A5B62;
+  --color-alert-danger-fg: #E11D48;
+  --color-alert-danger-body: #5A5B62;
+
+  --color-connection-bg: rgba(23, 24, 28, 0.04);
+  --color-connection-border: rgba(23, 24, 28, 0.09);
+  --color-connection-fg: #5A5B62;
+
+  --color-skeleton-from: rgba(23, 24, 28, 0.10);
+  --color-skeleton-to: rgba(23, 24, 28, 0.05);
+
+  --color-empty-bg: rgba(23, 24, 28, 0.035);
+  --color-empty-border: rgba(23, 24, 28, 0.08);
+  --color-empty-icon-bg: rgba(23, 24, 28, 0.05);
+  --color-empty-icon-border: rgba(23, 24, 28, 0.16);
+  --color-empty-fg: #25262B;
+  --color-empty-body: #5A5B62;
 }
 
 /* --- The glass itself ---------------------------------------------------
