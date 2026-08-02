@@ -1,0 +1,47 @@
+# --- Secrets and local environment ---
+.env
+.env.*
+!.env.example
+*.pem
+
+# --- Python / runtime ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Node / hub ---
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.pnpm-store/
+
+# --- Playwright ---
+# Baselines (*-snapshots/) ARE committed: they are the visual regression contract.
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# --- Supabase ---
+supabase/.temp/
+supabase/.branches/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Claude Code (local overrides only; project settings are committed) ---
+.claude/settings.local.json
+.claude/*.local.json
