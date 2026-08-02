@@ -20,7 +20,7 @@ worth testing, because it is the one a stray GRANT can open.
 import psycopg
 import pytest
 
-from agents_runtime.queueing import INBOUND
+from agents_runtime.queueing import ALL_QUEUES, INBOUND
 
 # The Data API roles. `service_role` is included deliberately: internal tables
 # do not get a grant here, not even the one that bypasses everything else.
@@ -30,13 +30,16 @@ QUEUE_TABLE = f"pgmq.q_{INBOUND}"
 
 
 @pytest.mark.parametrize("role", DATA_API_ROLES)
-def test_the_data_api_roles_cannot_read_the_queue(dsn: str, role: str) -> None:
+@pytest.mark.parametrize("queue", ALL_QUEUES)
+def test_the_data_api_roles_cannot_read_the_queue(dsn: str, role: str, queue: str) -> None:
+    # As oito: quatro de trabalho e quatro DLQs. Uma fila nova que escapasse
+    # desta lista seria uma fila exposta, e o E0-08 deixou a cobranca escrita.
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(f"set role {role}")
 
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                cur.execute(f"select * from {QUEUE_TABLE}")
+                cur.execute(f"select * from pgmq.q_{queue}")
 
 
 @pytest.mark.parametrize("role", DATA_API_ROLES)
@@ -49,15 +52,16 @@ def test_the_data_api_roles_cannot_enqueue(dsn: str, role: str) -> None:
                 cur.execute("select pgmq.send(%s, %s)", (INBOUND, '{"forged": true}'))
 
 
-def test_the_worker_role_can_drive_the_queue(dsn: str) -> None:
+@pytest.mark.parametrize("queue", ALL_QUEUES)
+def test_the_worker_role_can_drive_the_queue(dsn: str, queue: str) -> None:
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute("set role worker_role")
 
-            cur.execute("select pgmq.send(%s, %s)", (INBOUND, '{"probe": true}'))
+            cur.execute("select pgmq.send(%s, %s)", (queue, '{"probe": true}'))
             message_id = cur.fetchone()[0]
-            cur.execute("select pgmq.read(%s, 30, 1)", (INBOUND,))
-            cur.execute("select pgmq.archive(%s, %s::bigint)", (INBOUND, message_id))
+            cur.execute("select pgmq.read(%s, 30, 1)", (queue,))
+            cur.execute("select pgmq.archive(%s, %s::bigint)", (queue, message_id))
             archived = cur.fetchone()[0]
 
         conn.rollback()
