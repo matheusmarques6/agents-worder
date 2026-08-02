@@ -63,10 +63,35 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: isCI ? "pnpm start" : "pnpm dev",
-    url: "http://127.0.0.1:3000",
-    reuseExistingServer: !isCI,
-    timeout: 120_000,
-  },
+  // Two servers, because one of them has to be the production case.
+  //
+  // :3000 runs with the design showcase enabled — that is where the journeys
+  // live. :3001 runs the same build WITHOUT the flag, and exists so "the
+  // showcase is not part of production" can be asserted against a real server
+  // answering a real request instead of being taken on trust.
+  webServer: [
+    {
+      command: isCI ? "pnpm start" : "pnpm dev",
+      url: "http://127.0.0.1:3000",
+      env: { DESIGN_SHOWCASE: "1" },
+      reuseExistingServer: !isCI,
+      timeout: 120_000,
+    },
+    {
+      command: isCI ? "pnpm exec next start --port 3001" : "pnpm exec next dev --port 3001",
+      url: "http://127.0.0.1:3001",
+      env: {
+        // Explicitly empty rather than merely unset: a developer with the flag
+        // exported in their shell would otherwise turn this server into a copy
+        // of the first one and the 404 assertion would quietly stop testing.
+        DESIGN_SHOWCASE: "",
+        // Its own build directory — Next allows one dev server per directory.
+        // In CI both servers are `next start` over the same build, so the
+        // variable is only meaningful locally.
+        ...(isCI ? {} : { NEXT_DIST_DIR: ".next-production-check" }),
+      },
+      reuseExistingServer: !isCI,
+      timeout: 120_000,
+    },
+  ],
 });

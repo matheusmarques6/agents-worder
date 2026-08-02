@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { canonicalAll } from "./support/css";
+
 // E0-13 — the token contract.
 //
 // Every value here was read from `Agents Worder - Design System.dc.html` in
@@ -20,26 +22,11 @@ async function tokensOf(page: import("@playwright/test").Page, names: string[]):
   }, names);
 }
 
-// Expected values are written exactly as the design writes them — `#FFFFFF`,
-// `-0.035em` — while the production build ships the shortest equivalent
-// spelling: lowercase, `#fff`, `-.035em`. Those are serialisations of the same
-// value, so they are canonicalised on both sides rather than transcribed in
-// minified form, which would make the contract stop reading like its source.
-function canonical(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/, "#$1$1$2$2$3$3")
-    .replace(/(^|[\s(,])(-?)\.(\d)/g, "$1$20.$3");
-}
-
-function normalise(tokens: Tokens): Tokens {
-  return Object.fromEntries(
-    Object.entries(tokens).map(([name, value]) => [name, canonical(value)]),
-  );
-}
-
+// Values are written here exactly as the design writes them; the build ships
+// the shortest equivalent spelling. See e2e/support/css.ts for why comparing
+// canonical forms is the honest way to assert that.
 async function expectTokens(page: import("@playwright/test").Page, expected: Tokens) {
-  expect(normalise(await tokensOf(page, Object.keys(expected)))).toEqual(normalise(expected));
+  expect(canonicalAll(await tokensOf(page, Object.keys(expected)))).toEqual(canonicalAll(expected));
 }
 
 // 01 · Cor — the brand ramp. Orange is action, state and data; never a page
@@ -103,13 +90,27 @@ const TYPE_DETAIL = {
   "--text-label--letter-spacing": "0.14em",
 };
 
-// 03 · Liquid Glass — only the blurs live here. The surfaces, borders and
-// highlights of the three levels arrive with the primitive in E0-14, where
-// there is something to assert them against.
+// 03 · Liquid Glass — the three levels, blur and surface. The recipe is
+// asserted end-to-end in glass.spec.ts; what is asserted here is that the
+// values exist as tokens, so a component can never spell one out.
 const BLUR = {
   "--blur-chrome": "28px",
   "--blur-card": "24px",
   "--blur-overlay": "40px",
+};
+
+const GLASS = {
+  "--color-glass-chrome-from": "rgba(255, 255, 255, 0.075)",
+  "--color-glass-chrome-to": "rgba(255, 255, 255, 0.03)",
+  "--color-glass-chrome-border": "rgba(255, 255, 255, 0.10)",
+  "--color-glass-card-from": "rgba(255, 255, 255, 0.06)",
+  "--color-glass-card-to": "rgba(255, 255, 255, 0.022)",
+  "--color-glass-card-border": "rgba(255, 255, 255, 0.09)",
+  "--color-glass-overlay-from": "rgba(255, 255, 255, 0.10)",
+  "--color-glass-overlay-to": "rgba(255, 255, 255, 0.045)",
+  "--color-glass-overlay-border": "rgba(255, 255, 255, 0.15)",
+  // The surface a glass falls back to when it finds itself inside another one.
+  "--color-glass-nested": "rgba(255, 255, 255, 0.045)",
 };
 
 // 04 · Raio — named by use, exactly as the design states it: 8 chips and small
@@ -138,6 +139,14 @@ const SPACE = {
   "--spacing-reading": "680px",
 };
 
+// The design defines mobile as BELOW 860px; Tailwind breakpoints are
+// min-width, so the token is the desktop side of that same line. It was in the
+// stylesheet from E0-13 but outside this contract, which meant renaming it
+// broke nothing — the exact hole a token contract exists to close.
+const BREAKPOINT = {
+  "--breakpoint-desk": "860px",
+};
+
 test.describe("design tokens", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -160,14 +169,14 @@ test.describe("design tokens", () => {
   test("keeps the brand ramp identical in both themes", async ({ page }) => {
     // The ramp is the brand, not a surface: a light theme that shifts it would
     // be a second brand nobody approved.
-    const dark = normalise(await tokensOf(page, Object.keys(BRAND)));
+    const dark = canonicalAll(await tokensOf(page, Object.keys(BRAND)));
     // Without this, the test also passes when NEITHER theme defines the ramp —
     // two nothings compare equal.
-    expect(dark).toEqual(normalise(BRAND));
+    expect(dark).toEqual(canonicalAll(BRAND));
 
     await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
 
-    expect(normalise(await tokensOf(page, Object.keys(BRAND)))).toEqual(dark);
+    expect(canonicalAll(await tokensOf(page, Object.keys(BRAND)))).toEqual(dark);
   });
 
   test("exposes the named type scale", async ({ page }) => {
@@ -176,6 +185,14 @@ test.describe("design tokens", () => {
 
   test("exposes the three glass blurs", async ({ page }) => {
     await expectTokens(page, BLUR);
+  });
+
+  test("exposes the surface of each glass level and the nested fallback", async ({ page }) => {
+    await expectTokens(page, GLASS);
+  });
+
+  test("exposes the desktop breakpoint", async ({ page }) => {
+    await expectTokens(page, BREAKPOINT);
   });
 
   test("exposes radii named by use", async ({ page }) => {

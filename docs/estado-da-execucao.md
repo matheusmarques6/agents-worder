@@ -30,6 +30,13 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 | E0-12 provas negativas | ✅ N1/N2/N4 · N3 pendente da T3 | tabela com PR, run e job em `docs/plano-e0-fundacao.md` §E0-12 |
 | E0-08 pgmq real + esqueleto do laço | ✅ | `pytest -m pipeline` 9 verdes · cada arquivo visto **vermelho** primeiro (módulo inexistente) · `-m "unit or db"` 89 verdes · a suíte de exposição da fila provada nos dois sentidos por sabotagem (ver decisão 20) · `ruff check` e `lint-imports` verdes |
 
+**Trilha T3 (design system) — iniciada.** Ordem de execução resequenciada: 13 → 14 → 16/17 → 15 → 18, porque a prova de cada lote de componentes é a baseline visual, que exige vitrine e harness de pé.
+
+| Item | Estado | Prova executada |
+|---|---|---|
+| E0-13 tokens | ✅ PR [#6](https://github.com/matheusmarques6/agents-worder/pull/6) | contrato de tokens visto **vermelho** primeiro (14 falhas nos 2 viewports) · trava de cor vista reprovando contra `#F97316` plantado na home · gate de CI verde |
+| E0-14 primitivo Glass | ✅ | 8 asserções de estilo computado × 2 viewports, vermelhas primeiro (rota e componente inexistentes) · trava estendida vista reprovando contra `rgba()` num componente e `backdrop-blur` fora do vidro · 404 da vitrine provado contra um **segundo servidor** sem a flag |
+
 Com o Docker resolvido (§ abaixo), o **E0-07** e o **E0-08** deixaram de estar bloqueados. Com o E0-09 verde, a **trilha T3 (design system) também está destravada** — ela dependia só do Playwright configurado.
 
 O E0-08 fecha o nível `pipeline`: existe agora **um teste real de cada nível** (`unit`, `db`, `rls`, `pipeline`, E2E), que é a primeira das oito provas do §12 do plano — falta só rodá-los no CI.
@@ -131,11 +138,19 @@ Ficam registradas aqui porque mudam como o código se comporta:
 
 ---
 
+30. **A vitrine é `/design`, não `/_design`.** O plano pedia `_design`; no App Router do Next, pasta com prefixo `_` é privada e **sai do roteamento** — a rota simplesmente não existiria. A proteção real não é o nome: é a flag `DESIGN_SHOWCASE` avaliada no servidor, com `force-dynamic` para a decisão ser de runtime e não de build. E isso virou asserção: o Playwright sobe **dois** servidores, o segundo sem a flag, e afirma 404 contra ele. "Fora do build de produção" deixou de ser promessa.
+31. **Três achados do pipeline de CSS no E0-14.** (a) Escrever `-webkit-backdrop-filter` à mão fez o Lightning CSS **descartar** a propriedade sem prefixo — o vidro saiu do build sem `backdrop-filter` nenhum, e o teste pegou. A regra: não escrever prefixo à mão, o build prefixa. (b) O build reescreve `rgba()` para hex de 8 dígitos, o que **quantiza o alfa para um byte** (`0.075` → `#ffffff13` → 0.0745). É determinístico — os doze valores do vidro batem com `Math.round(alfa × 255)` — então a comparação canoniza os dois lados em `e2e/support/css.ts` em vez de o contrato passar a ser escrito em forma minificada. (c) O Next 16 só permite **um `next dev` por diretório de build** (o lock é da pasta, não da porta), então o segundo servidor tem o seu, via `distDir` por variável de ambiente.
+32. **A trava de cor virou `no-loose-colour.mjs`** e cobre agora `rgb/rgba/hsl/hwb/lab/lch/oklab/oklch/color(` além de hex, mais uma segunda regra: `backdrop-filter`/`backdrop-blur` **só** no arquivo de tokens — nem no `glass.tsx`, que não precisa de nenhum dos dois porque a receita é CSS e o componente só decide nível e aninhamento. Empilhar vidro por utility solta é o mesmo bug que o contexto previne, só que por fora do componente. `color-mix()` fica liberado de propósito: ele compõe tokens, não inventa cor.
+33. **O vidro em light está parcialmente sem fonte.** A seção 12 do design desenha a receita light do nível **card** e só dele. `chrome` e `overlay` reusam a superfície aprovada do card mantendo blur e raio próprios, e o aninhado em light usa `rgba(23,24,28,0.05)` — a superfície recuada que o design já usa em light (balão recebido, seção 12). É reuso, não cor inventada, mas **é pendência de design**: fechar antes do E5, que constrói o shell do hub.
+
+---
+
 ## Pendências que continuam abertas
 
 Do plano (§9 e §11), nenhuma resolvida ainda:
 
 - **B-1** VPS de staging · **B-2** conta Logfire · **B-3** conta Grafana Cloud · **B-4** gap-check Meta/lojas/Evolution · **B-5** decidir o ambiente Supabase de staging (recomendação: segundo projeto).
+- **Receita light do vidro para `chrome` e `overlay`** — a seção 12 do design só desenha o nível `card` (decisão 33). Fechar antes do E5.
 - Telas sem layout mobile; divergências entre o design e `core/telas-da-aplicacao.md`; `core/formulario-perguntas.md` inexistente; LLM do agente indefinido.
 
 Anotadas no E0-08 para serem cobradas no **E1**:
