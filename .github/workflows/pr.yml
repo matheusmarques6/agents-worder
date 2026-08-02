@@ -1,0 +1,151 @@
+# The blocking gate — E0-10.
+#
+# Every job here is a required check on `main`, so green is not a
+# recommendation: nothing merges without it. The target is under 5 minutes,
+# because a gate people learn to work around is worse than no gate (plano
+# §10, R4). If it ever stops fitting, what leaves the PR is what already runs
+# on `main` — never the `rls` suite.
+#
+# The four jobs are independent and run in parallel; each one is also the place
+# a specific sabotage has to fail (plano §E0-12):
+#   boundaries -> N1   tests-py -> N2 and N4   tests-hub -> N3, from E0-18 on.
+
+name: pr
+
+on:
+  pull_request:
+  # E0-11 calls this same file on `main`, so the gate is one definition and not
+  # two that drift.
+  workflow_call:
+
+# A newer push makes the previous run irrelevant — cancelling it is half of how
+# the 5-minute target survives a busy day. On `main` nothing is cancelled: a run
+# there is the record of what that commit actually passed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Explicit, though it is also the local default: a suite must never be able to
+  # reach a database nobody chose.
+  SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  # The lean local stack — 2 of 14 containers. Everything the `db`, `rls` and
+  # `pipeline` levels touch is Postgres, plus GoTrue because `profiles.user_id`
+  # and `memberships.user_id` reference `auth.users`.
+  SUPABASE_EXCLUDE: realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+
+      # Includes the ban on `print`: logging goes through the Logfire SDK.
+      - run: uv run --directory runtime ruff check .
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: hub/pnpm-lock.yaml
+
+      - run: pnpm --dir hub install --frozen-lockfile
+      - run: pnpm --dir hub lint
+
+  boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+
+      # Fitness function nº 1 of arquitetura §8 — the module table is a boundary
+      # here or it is a convention nowhere.
+      - run: uv run --directory runtime lint-imports
+
+  tests-py:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+
+      # `supabase start` applies every migration on the way up, so the schema
+      # under test is the one the migrations describe — never a dump.
+      - name: Start the lean stack
+        run: supabase start -x "$SUPABASE_EXCLUDE"
+
+      # One run covers three levels: `unit`, `db` and — inside `tests/db/` — the
+      # `rls` leak suite, which is blocking from the very first PR
+      # (core/testes-e-cicd.md §3.2).
+      - run: uv run --directory runtime pytest -m "unit or db"
+
+  tests-hub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: hub/pnpm-lock.yaml
+
+      - run: pnpm --dir hub install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('hub/pnpm-lock.yaml') }}
+
+      # Both projects are Chromium (Desktop Chrome and Pixel 7), so one browser
+      # covers the desktop and the mobile viewport.
+      - run: pnpm --dir hub exec playwright install --with-deps chromium
+
+      - run: pnpm --dir hub typecheck
+      - run: pnpm --dir hub build
+
+      # `CI` is set by GitHub, which is what switches the config into its
+      # blocking shape: visual baselines compared instead of skipped,
+      # `test.only` rejected, the production server serving the journeys.
+      - run: pnpm --dir hub e2e
+
+      - name: Keep the report when a journey fails
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: hub/playwright-report
+          retention-days: 7
