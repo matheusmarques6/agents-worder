@@ -19,16 +19,16 @@ from agents_runtime.queueing import INBOUND
 from agents_runtime.repository.queue import PgmqQueue
 from tests.support.database import dsn_from_env
 
+if sys.platform == "win32":
+    # psycopg's async connections need a selector loop and Windows defaults to
+    # proactor. Production and CI run on Linux, where the selector loop already
+    # is the default — so the hook is not merely inert there, it does not exist.
+    # Registering it and returning None is a UsageError: pytest-asyncio treats
+    # "no implementation" and "an implementation that declines" differently, and
+    # only the first one falls back to the default loop.
 
-def pytest_asyncio_loop_factories(config: pytest.Config, item: pytest.Item) -> dict | None:
-    """psycopg's async connections need a selector loop; Windows defaults to proactor.
-
-    Production runs on Linux, where the selector loop is already the default —
-    this only keeps the suite runnable on the development machine.
-    """
-    if sys.platform != "win32":
-        return None
-    return {"selector": asyncio.SelectorEventLoop}
+    def pytest_asyncio_loop_factories(config: pytest.Config, item: pytest.Item) -> dict:
+        return {"selector": asyncio.SelectorEventLoop}
 
 
 @pytest.fixture(scope="session")
