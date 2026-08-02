@@ -1,26 +1,152 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Obsidian Glass — the token layer (E0-13).
+ *
+ * Every value here is transcribed from `Agents Worder - Design System.dc.html`
+ * in Claude Design, sections 01–04. That file is the contract; this one is its
+ * only representation in code. A screen that needs a value not in this file
+ * needs a decision in the design first, not a hex in a component — which is
+ * what `scripts/no-loose-hex.mjs` enforces.
+ *
+ * Names are by ROLE, not by scale, wherever the design speaks in roles ("12
+ * botões e nav", "18–22 cards e overlays"). `radius-control` survives a
+ * redesign that changes 12 to 14; `radius-12` does not.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@theme {
+  /* --- 01 · Cor ------------------------------------------------------------
+   * The brand ramp. Orange is action, active state and data — never a page
+   * background, and only one orange element per visual block (princípio 01).
+   * Seven steps is what the design defines; an eighth would be invention.
+   */
+  --color-brand-50: #FFF7ED;
+  --color-brand-100: #FFEDD5;
+  --color-brand-200: #FED7AA;
+  --color-brand-300: #FDBA74;
+  --color-brand-500: #F97316;
+  --color-brand-600: #EA580C;
+  --color-brand-900: #7C2D12;
+
+  /* Semantics carry state and nothing else. Decoration in these colours reads
+   * as a status that is not there. */
+  --color-success: #34D399;
+  --color-warning: #FACC15;
+  --color-danger: #F43F5E;
+
+  /* Surfaces and text, dark — the default theme. Overridden wholesale by the
+   * `[data-theme="light"]` block below; nothing else in the system needs to
+   * know a theme exists. */
+  --color-surface: #08090C;
+  --color-surface-raised: #0F1014;
+  --color-surface-solid: #1A1B20;
+
+  --color-fg: #F4F4F5;
+  --color-fg-muted: #A9AAB2;
+  --color-fg-subtle: #75767E;
+  --color-fg-disabled: #5F6067;
+
+  /* --- 02 · Tipografia -----------------------------------------------------
+   * Geist for the interface, Geist Mono for numbers, IDs, labels and code
+   * (princípio 03). Sizes are named by role, and the tracking travels with the
+   * size: display type without its -3.5% is not the same typeface decision.
+   */
+  --text-display: 44px;
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.035em;
+
+  --text-metric: 34px;
+  --text-metric--letter-spacing: -0.03em;
+
+  --text-title: 19px;
+  --text-title--letter-spacing: -0.015em;
+
+  --text-card: 14px;
+
+  --text-body: 13.5px;
+  --text-body--line-height: 1.6;
+
+  --text-small: 12px;
+
+  --text-label: 10px;
+  --text-label--letter-spacing: 0.14em;
+
+  /* --- 03 · Liquid Glass ---------------------------------------------------
+   * Only the blurs. The surfaces, borders and inner highlights of the three
+   * levels arrive with the primitive in E0-14, where there is something to
+   * assert them against.
+   */
+  --blur-chrome: 28px;
+  --blur-card: 24px;
+  --blur-overlay: 40px;
+
+  /* --- 04 · Raio -----------------------------------------------------------
+   * 8 chips and small inputs · 12 buttons and nav · 18–22 cards and overlays ·
+   * full for pills and avatars. The design draws "full" as 99px; 9999px is the
+   * same shape for anything under 198px tall and stays full above it.
+   */
+  --radius-chip: 8px;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-chrome: 20px;
+  --radius-overlay: 22px;
+  --radius-pill: 9999px;
+
+  /* --- 04 · Espaçamento e medidas ------------------------------------------
+   * Base 2, so the ladder the design draws — 4, 8, 14, 18, 32 — is expressible
+   * exactly. The named steps exist so a component says `p-card`, not `p-9`.
+   */
+  --spacing: 2px;
+
+  --spacing-chip: 4px;
+  --spacing-item: 8px;
+  --spacing-cards: 14px;
+  --spacing-card: 18px;
+  --spacing-section: 32px;
+
+  --spacing-shell: 14px;
+  --spacing-touch: 44px;
+  --spacing-sidebar: 242px;
+  --spacing-aside: 340px;
+  --spacing-reading: 680px;
+
+  /* The design defines mobile as BELOW 860px. Tailwind breakpoints are
+   * min-width, so the named one is the desktop side of the same line: `desk:`
+   * means "860 and up", and everything unprefixed is the mobile layout. */
+  --breakpoint-desk: 860px;
+
+  /* Pinned by the `geist` package and the lockfile, never downloaded at build
+   * time — see app/layout.tsx. */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Light is a theme the user selects, not one the operating system imposes:
+ * `prefers-color-scheme` is deliberately not consulted. The dark shell is the
+ * product's face, and a merchant opening the hub on a machine set to light
+ * should still see what the design shows until they ask otherwise.
+ *
+ * Unlayered, so it wins over the `@theme` output regardless of specificity.
+ *
+ * `surface-solid` is the third neutral of each theme. The design names it
+ * "solid" in dark and "sunken" in light because elevation inverts — lighter
+ * than the background in dark, darker in light — but it is one slot, and one
+ * slot gets one token name.
+ */
+:root[data-theme="light"] {
+  --color-surface: #F3F2F0;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-solid: #E9E7E3;
+
+  --color-fg: #17181C;
+  --color-fg-muted: #5A5B62;
+  --color-fg-subtle: #7A7B82;
+  --color-fg-disabled: #A8A9AF;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
 }
