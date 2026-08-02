@@ -575,6 +575,45 @@
   --color-empty-icon-border: rgba(23, 24, 28, 0.16);
   --color-empty-fg: #25262B;
   --color-empty-body: #5A5B62;
+
+  /* Conversation and overlays in light — the third time the same cause shows
+   * up (decisão 45): the dark palette is white-on-dark throughout, so on a
+   * light surface every one of these disappears. Here it was the whole
+   * incoming side of the conversation and every item of the menu.
+   *
+   * Same treatment: the recessed surfaces the design already uses in light
+   * (`rgba(23,24,28,…)`, seção 12) and text dark enough to read. No invented
+   * hue. */
+  --color-bubble-in-bg: rgba(23, 24, 28, 0.05);
+  --color-bubble-in-border: rgba(23, 24, 28, 0.10);
+  --color-bubble-in-fg: #25262B;
+
+  --color-bubble-human-bg: rgba(23, 24, 28, 0.08);
+  --color-bubble-human-border: rgba(23, 24, 28, 0.12);
+  --color-bubble-human-fg: #17181C;
+
+  --color-bubble-meta: #7A7B82;
+
+  --color-thread-marker-bg: rgba(23, 24, 28, 0.04);
+  --color-thread-marker-border: rgba(23, 24, 28, 0.14);
+  --color-thread-marker-fg: #5A5B62;
+
+  --color-typing-dot-1: rgba(23, 24, 28, 0.5);
+  --color-typing-dot-2: rgba(23, 24, 28, 0.3);
+  --color-typing-dot-3: rgba(23, 24, 28, 0.18);
+
+  --color-takeover-fg: #9A3412;
+  --color-takeover-body: #5A5B62;
+
+  --color-composer-blocked-bg: rgba(23, 24, 28, 0.03);
+  --color-composer-blocked-border: rgba(23, 24, 28, 0.12);
+  --color-composer-blocked-fg: #7A7B82;
+
+  --color-menu-item-fg: #25262B;
+  --color-menu-item-active-bg: rgba(23, 24, 28, 0.06);
+  --color-menu-item-active-fg: #17181C;
+  --color-menu-separator: rgba(23, 24, 28, 0.10);
+  --color-menu-item-danger-fg: #E11D48;
 }
 
 /* --- The glass itself ---------------------------------------------------
