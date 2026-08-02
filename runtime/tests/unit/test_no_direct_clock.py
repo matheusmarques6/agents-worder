@@ -42,6 +42,11 @@ _FORBIDDEN_IMPORTS = {
     "asyncio": {"sleep"},
 }
 
+# `import time as t` / `from datetime import datetime as dt` — the canonical
+# name is gone from the call site; the alias has to be traced back to it.
+_ALIASABLE_MODULES = {"time", "asyncio", "datetime"}
+_ALIASABLE_CLASSES = {"datetime", "date"}
+
 
 def _dotted_suffix(node: ast.expr) -> tuple[str, str] | None:
     """('datetime', 'now') for `datetime.now`, `dt.datetime.now`, `x.time`."""
@@ -59,11 +64,20 @@ def _violations(source: str) -> list[str]:
     tree = ast.parse(source)
 
     aliased: dict[str, str] = {}
+    renamed: dict[str, str] = {}
     for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in _ALIASABLE_MODULES and alias.asname:
+                    renamed[alias.asname] = alias.name
         if isinstance(node, ast.ImportFrom) and node.module in _FORBIDDEN_IMPORTS:
             for alias in node.names:
                 if alias.name in _FORBIDDEN_IMPORTS[node.module]:
                     aliased[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+        if isinstance(node, ast.ImportFrom) and node.module == "datetime":
+            for alias in node.names:
+                if alias.name in _ALIASABLE_CLASSES and alias.asname:
+                    renamed[alias.asname] = alias.name
 
     found: list[str] = []
     for node in ast.walk(tree):
@@ -73,6 +87,8 @@ def _violations(source: str) -> list[str]:
             found.append(f"line {node.lineno}: {aliased[node.func.id]}()")
             continue
         suffix = _dotted_suffix(node.func)
+        if suffix is not None:
+            suffix = (renamed.get(suffix[0], suffix[0]), suffix[1])
         if suffix in _FORBIDDEN_CALLS:
             found.append(f"line {node.lineno}: {suffix[0]}.{suffix[1]}()")
     return found
@@ -109,6 +125,12 @@ class TestTheDetectorItself:
 
     def test_catches_an_aliased_import(self) -> None:
         assert _violations("from asyncio import sleep as nap\nnap(1)\n")
+
+    def test_catches_an_aliased_module(self) -> None:
+        assert _violations("import time as t\nt.time()\n")
+
+    def test_catches_an_aliased_class(self) -> None:
+        assert _violations("from datetime import datetime as dt\ndt.now()\n")
 
     def test_ignores_a_mention_in_a_comment(self) -> None:
         assert not _violations("# never call datetime.now() here\nx = 1\n")

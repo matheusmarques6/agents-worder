@@ -65,6 +65,27 @@ create table public.memberships (
 create index memberships_user_id_idx on public.memberships (user_id);
 
 -- ---------------------------------------------------------------------------
+-- updated_at moves by trigger, not by convention
+-- ---------------------------------------------------------------------------
+-- A write path that forgets to touch `updated_at` produces a column that lies
+-- with authority. The trigger makes forgetting impossible; every future table
+-- with an `updated_at` attaches this same function.
+create function public.touch_updated_at()
+    returns trigger
+    language plpgsql
+    set search_path = pg_catalog
+as $$
+begin
+    new.updated_at = now();
+    return new;
+end
+$$;
+
+create trigger tenants_touch_updated_at
+    before update on public.tenants
+    for each row execute function public.touch_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- Application roles (ADR-11)
 -- ---------------------------------------------------------------------------
 -- Two roles, two connection pools, one purpose each: `worker_role` for the
@@ -143,16 +164,23 @@ grant execute on function public.user_tenant_ids() to authenticated;
 
 -- The tenant the current unit of work is scoped to, for the app pools.
 --
--- Unset or unparseable yields NULL, and `tenant_id = NULL` is never true — so a
--- pool that forgot to scope its transaction reads nothing instead of reading
--- everything. Failing closed is the whole point.
+-- Unset, empty or unparseable yields NULL, and `tenant_id = NULL` is never
+-- true — so a pool that forgot to scope its transaction, or wrote garbage into
+-- the setting, reads nothing instead of reading everything. plpgsql because a
+-- bare `::uuid` cast would turn garbage into an error on every statement of
+-- the connection — failing closed must not mean failing loudly forever.
 create function public.current_app_tenant_id()
     returns uuid
-    language sql
+    language plpgsql
     stable
     set search_path = pg_catalog
 as $$
-    select nullif(current_setting('app.tenant_id', true), '')::uuid
+begin
+    return nullif(current_setting('app.tenant_id', true), '')::uuid;
+exception
+    when invalid_text_representation then
+        return null;
+end
 $$;
 
 revoke execute on function public.current_app_tenant_id() from public;

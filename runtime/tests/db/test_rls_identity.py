@@ -205,3 +205,16 @@ class TestTenantIdCannotComeFromTheClient:
             rows = conn.execute("select id from public.memberships").fetchall()
 
         assert rows == []
+
+    def test_a_malformed_tenant_scope_reads_nothing(
+        self, dsn: str, two_tenants: TwoTenants
+    ) -> None:
+        """Not a uuid at all. Failing closed means zero rows, not an error on
+        every statement — a pool that writes garbage must not turn into an
+        outage of its whole connection."""
+        with psycopg.connect(dsn) as conn:
+            conn.execute("select set_config('app.tenant_id', 'not-a-uuid', true)")
+            conn.execute("set role worker_role")
+            rows = conn.execute("select id from public.memberships").fetchall()
+
+        assert rows == []

@@ -117,13 +117,17 @@ def as_app_role(dsn: str, role: str, tenant_id: uuid.UUID) -> Iterator[psycopg.C
     SET ROLE is enough to make RLS apply: the resulting role is not a superuser,
     has no BYPASSRLS and does not own the tables — the same three properties the
     production pools have, asserted separately in the leak suite.
+
+    The scope is transaction-local (`is_local => true`) on purpose: the
+    production discipline is `SET LOCAL app.tenant_id` per unit of work, and
+    the harness must exercise the same lifetime the driver will use.
     """
     if role not in APP_ROLES:
         raise ValueError(f"unknown app role: {role}")
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
-            cur.execute("select set_config('app.tenant_id', %s, false)", (str(tenant_id),))
+            cur.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
             cur.execute(f"set role {role}")
         yield conn
 
@@ -134,11 +138,12 @@ def as_authenticated_user(dsn: str, user_id: uuid.UUID) -> Iterator[psycopg.Conn
 
     `auth.uid()` reads `request.jwt.claims`, so setting it reproduces exactly
     what PostgREST does with a verified token — without needing to sign one.
+    PostgREST sets the claims transaction-locally, so the harness does too.
     """
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "select set_config('request.jwt.claims', %s, false)",
+                "select set_config('request.jwt.claims', %s, true)",
                 (f'{{"sub": "{user_id}", "role": "authenticated"}}',),
             )
             cur.execute("set role authenticated")
