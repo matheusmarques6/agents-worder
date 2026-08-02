@@ -1,0 +1,87 @@
+# Where visual baselines come from — E0-17.
+#
+# A baseline is a contract about pixels, so it has to be produced by the same
+# environment that will compare against it. A PNG captured on a developer
+# machine differs in font rasterisation and in how the GPU composites the
+# glass blur; committed, it becomes a contract nobody else can satisfy.
+# `playwright.config.ts` refuses to write baselines outside CI, and this
+# workflow is the only sanctioned way to obtain them.
+#
+# It produces an ARTIFACT rather than pushing a commit. Not for lack of trying:
+# a push made with GITHUB_TOKEN does not trigger workflows, by design, so the
+# pull request would sit forever with four required checks "expected" against a
+# commit no run exists for — unmergeable. Downloading the artifact and
+# committing it locally keeps the baselines CI-born, keeps the images in the
+# PR diff where fidelity is reviewed, and keeps the gate running.
+#
+#   gh run download <run-id> -n visual-baselines -D hub/e2e/__screenshots__
+#   git add hub/e2e/__screenshots__ && git commit && git push
+
+name: update-baselines
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "missing = only new baselines · changed = accept intentional visual changes · all = rewrite everything"
+        type: choice
+        default: missing
+        options: [missing, changed, all]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Refuse to run against the default branch
+        if: github.ref_name == github.event.repository.default_branch
+        run: |
+          echo "Baselines are produced on the branch of a pull request, never on" >&2
+          echo "the default branch: a baseline that never went through review is" >&2
+          echo "a contract nobody agreed to." >&2
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: hub/pnpm-lock.yaml
+
+      - run: pnpm --dir hub install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('hub/pnpm-lock.yaml') }}
+
+      - run: pnpm --dir hub exec playwright install --with-deps chromium
+
+      - run: pnpm --dir hub build
+
+      # Same command the gate runs, with the flag that lets it write instead of
+      # compare. Everything else — viewports, threshold, reduced motion, the
+      # pinned fonts — comes from playwright.config.ts, so what is written here
+      # is what tests-hub will read.
+      - name: Capture
+        run: pnpm --dir hub exec playwright test --update-snapshots=${{ inputs.mode }}
+
+      - name: Show what changed
+        run: |
+          cd hub
+          git status --porcelain e2e/__screenshots__ || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: visual-baselines
+          path: hub/e2e/__screenshots__
+          if-no-files-found: error
+          retention-days: 7
