@@ -672,6 +672,42 @@
   --color-menu-item-active-fg: #17181C;
   --color-menu-separator: rgba(23, 24, 28, 0.10);
   --color-menu-item-danger-fg: #E11D48;
+
+  /* Navigation and data in light — the fourth lot, the same cause (decisão 49).
+   * Here it was the store name, the current sidebar item and the selected
+   * period that vanished. Recessed surfaces the design already uses in light,
+   * text dark enough to read, brand text at the approved #9A3412. */
+  --color-nav-fg: #5A5B62;
+  --color-nav-hover-bg: rgba(23, 24, 28, 0.05);
+  --color-nav-hover-fg: #17181C;
+  --color-nav-active-fg: #9A3412;
+  --color-nav-group: #7A7B82;
+  --shadow-nav-active-dot: none;
+
+  --color-switcher-bg: rgba(23, 24, 28, 0.04);
+  --color-switcher-border: rgba(23, 24, 28, 0.08);
+  --color-switcher-label: #7A7B82;
+  --color-switcher-name: #17181C;
+
+  --color-segment-bg: rgba(23, 24, 28, 0.04);
+  --color-segment-border: rgba(23, 24, 28, 0.09);
+  --color-segment-fg: #5A5B62;
+  --color-segment-active-bg: #FFFFFF;
+  --color-segment-active-fg: #17181C;
+  --shadow-segment-active: inset 0 1px 0 rgba(255, 255, 255, 1);
+
+  --color-tabbar-active-fg: #9A3412;
+  --color-tabbar-icon: rgba(23, 24, 28, 0.22);
+  --color-tabbar-fg: #5A5B62;
+
+  --color-table-head: #7A7B82;
+  --color-table-head-border: rgba(23, 24, 28, 0.09);
+  --color-table-row-fg: #25262B;
+  --color-table-row-muted: #5A5B62;
+  --color-table-row-border: rgba(23, 24, 28, 0.06);
+  --color-table-row-hover: rgba(23, 24, 28, 0.03);
+  --color-pager-border: rgba(23, 24, 28, 0.10);
+  --color-pager-fg: #5A5B62;
 }
 
 /* --- The glass itself ---------------------------------------------------
