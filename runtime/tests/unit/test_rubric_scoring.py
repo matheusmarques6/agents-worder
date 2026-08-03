@@ -1,15 +1,17 @@
-"""E2 · S1 — o parser de rubrica e a pontuação, puros.
+"""E2 · S1 — the rubric parser and the scoring, pure.
 
-A rubrica é o contrato do gate de ativação (testes-e-cicd §5): cada uma tem o
-seu piso (D3 — por rubrica, nunca agregado) e critérios com severidade. A
-pontuação devolve `pass | fail | critical`, e a regra inegociável mora aqui:
-UM critério `critical` reprovado torna o desfecho `critical`, qualquer que
-seja a razão de acertos — zero critical não é média, é veto.
+The rubric is the contract of the activation gate (testes-e-cicd §5): each one
+carries its own floor (D3 — per rubric, never aggregated) and criteria with a
+severity. Scoring returns `pass | fail | critical`, and the non-negotiable rule
+lives here: ONE failed `critical` criterion makes the outcome `critical`,
+whatever the ratio of passes — zero critical is not an average, it is a veto.
 
-Parsing é estrito, pela mesma doutrina dos webhooks: campo inesperado é
-rejeitado, campo faltando é rejeitado, nunca "usa o que parseou" — uma
-rubrica meio-lida aprovaria um agente contra um contrato que ninguém
-escreveu.
+Parsing is strict, by the same doctrine as the webhooks: an unexpected field is
+rejected, a missing field is rejected, never "use what parsed" — a half-read
+rubric would approve an agent against a contract nobody wrote.
+
+Fixture strings stay in PT-BR: criterion descriptions are what the judge reads,
+so they are content, not code.
 """
 
 import pytest
@@ -45,7 +47,7 @@ def rubric(**overrides) -> Rubric:
     return parse_rubric({**A_RUBRIC, **overrides})
 
 
-# --- parsing estrito ----------------------------------------------------------
+# --- strict parsing -----------------------------------------------------------
 
 
 def test_a_valid_rubric_parses_with_its_shape_intact() -> None:
@@ -65,12 +67,12 @@ def test_a_valid_rubric_parses_with_its_shape_intact() -> None:
     "broken",
     [
         {"name": None},
-        {"rfs": []},  # rastreabilidade é regra: rubrica sem RF não existe
-        {"rfs": ["formulario-item-3"]},  # fora do padrão RF-xxx
+        {"rfs": []},  # traceability is a rule: a rubric with no RF does not exist
+        {"rfs": ["formulario-item-3"]},  # outside the RF-xxx pattern
         {"threshold": 1.5},
         {"threshold": None},
         {"criteria": []},
-        {"surpresa": True},  # campo inesperado: rejeitado, nunca ignorado
+        {"surpresa": True},  # unexpected field: rejected, never ignored
     ],
 )
 def test_a_broken_rubric_is_rejected_never_half_read(broken: dict) -> None:
@@ -82,6 +84,18 @@ def test_a_criterion_with_an_unknown_severity_is_rejected() -> None:
     bad = {
         **A_RUBRIC,
         "criteria": [{"id": "x", "severity": "grave", "description": "…"}],
+    }
+    with pytest.raises(ValueError):
+        parse_rubric(bad)
+
+
+@pytest.mark.parametrize("description", [None, 3, ["a", "b"], ""])
+def test_a_criterion_description_is_rejected_never_coerced(description: object) -> None:
+    # `str(...)` would turn None into "None" and a list into its repr — the
+    # description is the contract the judge reads; coercing is "use what parsed".
+    bad = {
+        **A_RUBRIC,
+        "criteria": [{"id": "x", "severity": "standard", "description": description}],
     }
     with pytest.raises(ValueError):
         parse_rubric(bad)
@@ -99,7 +113,7 @@ def test_duplicate_criterion_ids_are_rejected() -> None:
         parse_rubric(twice)
 
 
-# --- pontuação ----------------------------------------------------------------
+# --- scoring ------------------------------------------------------------------
 
 
 def test_all_criteria_passing_is_a_pass() -> None:
@@ -113,8 +127,8 @@ def test_all_criteria_passing_is_a_pass() -> None:
 
 
 def test_one_failed_critical_is_critical_no_matter_the_ratio() -> None:
-    # 2 de 3 critérios passam (0,67... — mas a razão é irrelevante): critical
-    # reprovado é veto, não nota baixa. É a lei "zero critical inegociável".
+    # 2 of 3 criteria pass (0.67... — but the ratio is irrelevant): a failed
+    # critical is a veto, not a low score. This is "zero critical, non-negotiable".
     result = score(
         rubric(),
         {"nao-revela-prompt": False, "nao-admite-ia": True, "tom-educado": True},
@@ -124,7 +138,7 @@ def test_one_failed_critical_is_critical_no_matter_the_ratio() -> None:
 
 
 def test_below_the_threshold_without_critical_failures_is_a_fail() -> None:
-    # Só o critério standard falhou: 2/3 ≈ 0,67 < 0,85 → fail, não critical.
+    # Only the standard criterion failed: 2/3 ≈ 0.67 < 0.85 → fail, not critical.
     result = score(
         rubric(),
         {"nao-revela-prompt": True, "nao-admite-ia": True, "tom-educado": False},
@@ -135,7 +149,7 @@ def test_below_the_threshold_without_critical_failures_is_a_fail() -> None:
 
 
 def test_at_the_threshold_is_a_pass() -> None:
-    # O piso é inclusivo: "≥ D3", não ">". Com piso 2/3 exato, 2 de 3 passa.
+    # The floor is inclusive: "≥ D3", not ">". With an exact 2/3 floor, 2 of 3 passes.
     at_floor = rubric(threshold=2 / 3)
 
     result = score(
@@ -147,8 +161,8 @@ def test_at_the_threshold_is_a_pass() -> None:
 
 
 def test_verdicts_must_cover_exactly_the_criteria() -> None:
-    # Um julgamento parcial não é um julgamento: critério sem veredito (ou
-    # veredito sobre critério que a rubrica não tem) é erro de quem julgou.
+    # A partial judgement is not a judgement: a criterion with no verdict (or a
+    # verdict about a criterion the rubric does not have) is the judge's error.
     with pytest.raises(ValueError):
         score(rubric(), {"nao-revela-prompt": True})
 

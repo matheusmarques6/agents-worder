@@ -19,9 +19,9 @@ O E1 provou o motor com resposta fixa; o E2 troca a resposta fixa pelo **agente 
 
 | # | Decisão | Estado |
 |---|---|---|
-| **D1** | **LLM:** agente = `claude-sonnet-5` · Judge 1 = `claude-haiku-4-5` (pendência 5 da arquitetura, resolvida aqui). Limite de regeneração do Judge pré-envio: **2** (proposto) — entra nos defaults canônicos do CLAUDE.md quando confirmado | recomendação registrada — **confirmar com Bruno** |
-| **D2** | **Embedding:** `text-embedding-3-small` (OpenAI), **dimensão 1536** — barato, multilíngue sólido em PT-BR, e a dimensão congela na migration do S2 (expand-contract torna troca cara: decidir ANTES do S2 é a razão de o D2 existir) | recomendação registrada — **confirmar com Bruno antes do S2** |
-| **D3** | **Limite do pack é POR RUBRICA** (testes-e-cicd §5), não agregado; **zero `critical` inegociável em todas**. Piso proposto por rubrica: **≥ 0,85** | recomendação registrada — **confirmar com Bruno** |
+| **D1** | **LLM (emendado pelo Bruno em 2026-08-03):** o modelo do agente é **config por tenant** — campo `model` na config de `agent_versions`, default `claude-sonnet-5`, editável no admin (tela no E6; o dado nasce no S2). **Judge 1 é fixo da plataforma — `claude-haiku-4-5` — nunca por tenant**: portão de segurança não enfraquece por config de cliente. Limite de regeneração do Judge pré-envio: **2** (nos defaults canônicos do CLAUDE.md). **Todo tráfego LLM — chat e embedding — via OpenRouter**: um adapter OpenAI-compatível, modelo como string | **fixado (decisão 79)** |
+| **D2** | **Embedding:** `text-embedding-3-small` via OpenRouter, **dimensão 1536** — barato, multilíngue sólido em PT-BR, e a dimensão congela na migration do S2 (expand-contract torna troca cara: decidir ANTES do S2 é a razão de o D2 existir) | **fixado (decisão 79) — S2 desbloqueado** |
+| **D3** | **Limite do pack é POR RUBRICA** (testes-e-cicd §5), não agregado; **zero `critical` inegociável em todas**. Piso por rubrica: **≥ 0,85** — os arquivos do S1 já nasceram com esse valor, nada muda | **fixado (decisão 79)** |
 | **D4** | **B-2 (Logfire):** sem ela, a prova de custo/latência e o cenário 14 ficam **pendentes e explícitos** (mesmo tratamento do B-4 no E1) — nenhum outro passo bloqueia | fixado |
 | **D5** | **A assinatura do §3 vive DENTRO do responder, não na costura do motor.** A costura real do E1 é `respond(job: InboundJob) → dict` (`worker.py`), protegida pela Lei 1. A fábrica do `AGENTS_RESPONDER` devolve um callable com a forma do motor que, por dentro, carrega conversa + mensagens pendentes (transações curtas próprias, `SET LOCAL` — a mesma regra das tools do S7) e chama o núcleo com a forma do §3 (`respond(conversation, pending_msgs) → draft`). O S4 implementa o núcleo; o S9 implementa o adaptador | fixado |
 | **D6** | **Fonte de verdade da versão ativa é o índice parcial** em `agent_versions` (um único `active` por tenant). `tenants.active_version_id` **não entra** no S2 — dois mecanismos dizendo a mesma coisa divergem no pior dia; se uma FK-cache se provar necessária (leitura quente no hub), entra depois como expand com constraint que a escravize ao índice | fixado |
@@ -47,7 +47,7 @@ Rubricas versionadas no repo: correção factual sobre o conhecimento · tom/idi
 → Rodar: `pytest -m unit` + `ruff check`.
 
 ### S2 · Migration — a fatia do E2 (1d)
-`agent_versions` §2.1 (append-only; só `status`/`activated_at` mutam; **índice parcial: um único `active` por tenant — D6, sem a FK**) · `knowledge_chunks` §2.5 (dimensão de D2; nota LGPD do dicionário: chunk de FAQ fora da purga por contato, derivado de conversa dentro) · `eval_runs`/`judge_scores`/`tool_calls`/`llm_calls` §6.1–6.4 · **`alerts` §6.5** (o S8 escreve nela) · `scenarios` §2.4 **nasce interna** — o gate duplo do E4 (lojista testa cenários) sugere exposição futura; expor é mudança aditiva (grant + policy), o caminho expand. RLS + policies + suíte de vazamento no mesmo PR (disciplina do E0-07).
+`agent_versions` §2.1 (append-only; só `status`/`activated_at` mutam; **índice parcial: um único `active` por tenant — D6, sem a FK**; a config carrega o campo **`model`** — D1 emendado) · `knowledge_chunks` §2.5 (**`vector(1536)`** por D2; nota LGPD do dicionário: chunk de FAQ fora da purga por contato, derivado de conversa dentro) · `eval_runs`/`judge_scores`/`tool_calls`/`llm_calls` §6.1–6.4 (**`llm_calls` grava `provider` + `model`**: o roteamento é OpenRouter e o modelo varia por tenant) · **`alerts` §6.5** (o S8 escreve nela) · `scenarios` §2.4 **nasce interna** — o gate duplo do E4 (lojista testa cenários) sugere exposição futura; expor é mudança aditiva (grant + policy), o caminho expand. RLS + policies + suíte de vazamento no mesmo PR (disciplina do E0-07).
 → Testes (`db`/`rls`): vazamento nas tabelas novas com as três credenciais · índice parcial visto **vermelho** (segunda ativa → erro) · sabotagem no ritual.
 → Rodar: `supabase db reset` + `-m "unit or db"` + `-m pipeline`.
 
@@ -62,7 +62,7 @@ Ordem literal: base → cenário por ocasião → contexto do cliente → tools 
 → Rodar: `-m unit` + `lint-imports`.
 
 ### S5 · Porta do LLM + llm_calls (1d)
-Porta injetável; adapter de D1; toda chamada grava `llm_calls` (tokens, latência, custo). **Lei de PII explícita:** conteúdo de prompt/resposta fica SÓ no Postgres; para telemetria (S10) sobem custo/latência/ids — nunca conteúdo. Cassette só no `contract` semanal. **Trava de rede no gate: teste de fitness pytest** (o padrão das travas de AST do relógio/acaso — vive na suíte `unit`, sabotagem prova o raio), não grep de CI: host do provedor fora de `tests/contract` reprova.
+Porta injetável; adapter de D1 (**OpenAI-compatível apontando para OpenRouter — modelo é string, vem da config do tenant**); toda chamada grava `llm_calls` (tokens, latência, custo, `provider`, `model`). **Lei de PII explícita:** conteúdo de prompt/resposta fica SÓ no Postgres; para telemetria (S10) sobem custo/latência/ids — nunca conteúdo. Cassette só no `contract` semanal. **Trava de rede no gate: teste de fitness pytest** (o padrão das travas de AST do relógio/acaso — vive na suíte `unit`, sabotagem prova o raio), não grep de CI: host do provedor fora de `tests/contract` reprova. Com D1 emendado a allowlist tem **um host só — `openrouter.ai`** —, permitido apenas em `tests/contract`.
 → Testes (`unit`+`db`+1 `contract` não-bloqueante): contrato da porta · persistência · classificação de erro (reusa a unidade 4).
 → Rodar: `-m "unit or db"`.
 
@@ -111,7 +111,7 @@ Conversa real no número de teste (← adaptador E1 + **B-4**) · pack ≥ D3 po
 
 | Item | Bloqueia | Quando |
 |---|---|---|
-| Confirmar D1 (modelos + limite de regeneração), D2 (embedding/dimensão) e D3 (piso por rubrica) | D2 bloqueia o S2; D1/D3 bloqueiam o S5/S3 | **antes do S2** |
-| Chave de API do provedor LLM (e do embedding) | S11 (rede real); S5/S6 fecham com dublê | antes do S11 |
+| ~~Confirmar D1, D2 e D3~~ | — | **feito em 2026-08-03 — decisão 79** |
+| **Chave do OpenRouter** (uma só, cobre chat e embedding) | S11 (rede real); S5/S6 fecham com dublê | antes do S11 |
 | **B-4** token System User + número de teste (checklist da decisão 73, ~15 min) | prova 1 do E1 **e** S12 do E2 | quando puder |
 | **B-2** Logfire | S10 e a prova de custo/latência do S12 | quando existir |
