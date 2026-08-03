@@ -264,6 +264,24 @@ Ficam registradas aqui porque mudam como o código se comporta:
 72. **O worder1 evoluiu por conta própria para a nossa arquitetura de ingestão** — webhook público persiste o evento cru e responde 200 em <50ms; worker assíncrono com claim atômico, idempotência por UNIQUE(message_id), estados failed/dead com retry por cron. Eles usam QStash; nós usamos pgmq — mesma forma, transporte diferente, e o nosso já estava decidido pelo ADR-01. Evolução convergente é a validação mais barata que existe.
 73. **A receita exata das credenciais está no GUIA-CONEXAO-WHATSAPP.md do worder1**, escrita para o cliente final: (1) `phone_number_id` em Meta for Developers → WhatsApp → API Setup (o ID, não o telefone); (2) **System User Token permanente** — o token temporário morre em 24h — criado em business.facebook.com/settings → System Users, com `whatsapp_business_messaging` + `whatsapp_business_management` e assets App+WABA; (3) webhook em WhatsApp → Configuration com callback URL + verify token e o campo `messages` assinado. Checklist da demo: conferir se o número de teste precisa do `/register` e se o app está inscrito no WABA via `subscribed_apps` — os dois passos que o connect do worder1 faz e que um webhook mudo costuma denunciar.
 
+### Jurisprudência do worder1 — mapa de uso
+
+Cada lição minerada (decisões 66 e 71–73) tem um momento certo para entrar. A tabela é o
+contrato: nada disso vira código antes do marco que o reivindica, e nenhum marco listado
+começa sem reler a linha correspondente.
+
+| Lição do worder1 | Onde entra | Status |
+|---|---|---|
+| Formato do send (`POST /{phone_number_id}/messages`, Bearer, wamid em `messages[0].id`, v19.0 provada) | **E1** · adaptador `cloud_api.py` | **Já em uso** (PR #31) |
+| Webhook: GET `hub.challenge` + POST com HMAC-SHA256 em WebCrypto; conta resolvida por `value.metadata.phone_number_id` | **E1** · EF `ingest-meta` | **Já em uso** (PR #32; deploy aguarda secrets) |
+| Receita das credenciais (System User Token permanente — o de 24h é armadilha) + checklist do webhook mudo (`/register`, `subscribed_apps`) | **E1 · prova 1** — é o checklist dos desbloqueios do Bruno | Aguardando execução (~15 min no painel da Meta) |
+| worder1 **nunca usou** `biz_opaque_callback_data` — correlacionava por wamid | **Pendência nº 2** · suíte `contract` semanal — primeira execução assim que houver token, obrigatoriamente antes do piloto (E7) | Aberta; até lá, `unknown` degrada com segurança para `manual_review` |
+| Embedded Signup completo (code OAuth → business token → `subscribed_apps` → `register` com PIN) + coexistência atrás de feature flag + rate limit 3/min por org e IP | **E4** · onboarding do canal (B-4) | Blueprint pronto; portar, não copiar — persistência de token aqui é Vault, não AES próprio |
+| Libs auxiliares: backoff, rate-limiter, circuit-breaker, template-manager | **E3** · funis proativos, templates e anti-ban | Referência de forma; a implementação segue o Clock injetável e os defaults canônicos |
+| Cliente Evolution funcionando | **Rota B** · quando Evolution entrar (E8 / gap-check B-4) | Referência guardada |
+| Ingestão assíncrona convergente (200 rápido → claim atômico → idempotência por chave única) | Nenhum marco — **validação** do ADR-01/ADR-07, já decididos | Registro apenas (decisão 72) |
+| O que **não** migra: topologia tudo-em-API-routes do Next.js; criptografia at-rest própria (`ENCRYPTION_KEY`) | — | Anti-lição: os planos continuam separados e segredo mora no Vault |
+
 ---
 
 ## Pendências que continuam abertas
