@@ -23,13 +23,19 @@ from agents_runtime.config import config_from_env
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
 
-def _channel_from_env(dsn: str) -> ChannelPort | None:
-    spec = os.environ.get("AGENTS_CHANNEL")
+def _factory_from_env(variable: str, dsn: str):
+    """module:callable, called with the DSN. Broken specs die at startup —
+    absent and broken are different states (see tests/unit/test_channel_env)."""
+    spec = os.environ.get(variable)
     if not spec:
         return None
     module_name, _, attribute = spec.partition(":")
     factory = getattr(importlib.import_module(module_name), attribute)
     return factory(dsn)
+
+
+def _channel_from_env(dsn: str) -> ChannelPort | None:
+    return _factory_from_env("AGENTS_CHANNEL", dsn)
 
 
 def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
@@ -49,6 +55,9 @@ async def _serve(dsn: str) -> None:
         stop=stop,
         config=config_from_env(dict(os.environ)),
         channel=_channel_from_env(dsn),
+        # The responder seam, reachable from outside the process: cenário 4
+        # holds a REAL subprocess inside FASE 2 through this.
+        respond=_factory_from_env("AGENTS_RESPONDER", dsn),
         process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
         worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
