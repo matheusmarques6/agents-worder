@@ -100,6 +100,20 @@ Conversa real no número de teste (← adaptador E1 + **B-4**) · pack ≥ D3 po
 
 ---
 
+## 6.1 Emendas da execução (o que mudou entre o plano e o feito)
+
+Escrito enquanto o marco era executado, para que o plano não minta sobre o
+código. Cada linha tem a decisão numerada em `docs/estado-da-execucao.md`.
+
+| # | O plano dizia | O que foi feito, e por quê |
+|---|---|---|
+| E1 | S9 num passo só | **S9 dividido em S9a e S9b** (precedente do PR 2a/2b do E1): a composição do responder sozinha passa de 800 linhas, e juntá-la ao pós-envio faria um PR que ninguém revisa de verdade |
+| E2 | "laço de tools limitado" no S9 | **No E2 a recuperação é determinística, não escolhida pelo modelo** (decisão 88a). As duas tools do marco são contexto **incondicional**, e uma ida e volta a mais custa segundos numa conversa de WhatsApp. Tool que o modelo ESCOLHE entra no E3, quando existir escolha (pedido por id, rastreio, chamar humano). O rastro em `tool_calls` é idêntico — quem executa continua sendo o `run_tool` do S7 |
+| E3 | `get_customer_context` no toolset do E2 | **Construída e testada, sem consumidor no E2** (decisão 88b): a camada `customer_context` do RF-010 fala de PEDIDOS e o espelho chega no E3. Devolver zero seria inventar dado |
+| E4 | "reprovação regenera" (RF-015), sem dizer o que reprova | **Regra por severidade fixada com o Bruno** (decisão 87): `critical` nunca envia e nem regenera · só `standard` regenera com os critérios falhos como feedback · esgotou → **envia a melhor versão** · juiz ilegível conta como reprovação, e rascunho que nenhuma tentativa conseguiu julgar não sai. **O piso 0,85 do D3 não se aplica por mensagem** — ele é do gate de ativação, sobre um pacote |
+| E5 | nada sobre o não-envio no banco | `internal.conclude_turn` ganhou o **ramo de conteúdo nulo** por `create or replace` com a mesma assinatura (aditivo, N-1 compatível). Sem ele, bloquear uma resposta prenderia a conversa e o coalescer recriaria o job para sempre |
+| E6 | segredo do provedor sem lugar definido | **Chave do OpenRouter é segredo de plataforma** → env, não Vault (decisão 84c). Vault é para segredo **por tenant** (token Meta, E4), e é lá que o E0-22 vence |
+
 ## 7. Riscos
 
 | # | Risco | Mitigação |
@@ -114,6 +128,6 @@ Conversa real no número de teste (← adaptador E1 + **B-4**) · pack ≥ D3 po
 | Item | Bloqueia | Quando |
 |---|---|---|
 | ~~Confirmar D1, D2 e D3~~ | — | **feito em 2026-08-03 — decisão 79** |
-| **Chave do OpenRouter** (uma só, cobre chat e embedding) | S11 (rede real); S5/S6 fecham com dublê | antes do S11 |
+| ~~**Chave do OpenRouter**~~ | — | **entregue em 2026-08-03**: a suíte `contract` rodou e confirmou `usage.cost` e as 1536 dimensões. **Precisa ser recolocada na máquina nova** — ver "Retomada em OUTRA máquina" no estado |
 | **B-4** token System User + número de teste (checklist da decisão 73, ~15 min) | prova 1 do E1 **e** S12 do E2 | quando puder |
 | **B-2** Logfire | S10 e a prova de custo/latência do S12 | quando existir |
