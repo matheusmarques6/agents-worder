@@ -10,6 +10,11 @@ requires-python = ">=3.13"
 # rather than two.
 dependencies = [
     "psycopg[binary]>=3.2",
+    # The ONE production HTTP client. The Cloud API adapter is its first
+    # consumer; the E8 connectors (Shopify, Nuvemshop, Yampi) are its next.
+    # A second HTTP client would be a second set of timeout and pooling
+    # behaviours to reason about.
+    "httpx>=0.27",
 ]
 
 [dependency-groups]
