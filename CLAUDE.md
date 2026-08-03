@@ -84,6 +84,11 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 | Meta tier | pause proactives at 80% + alert |
 | Message retention | rolling TTL 12–24 months (tenant config, default 12) · cancelled-merchant purge: hard delete after 10 days |
 | Revenue attribution | order paid ≤ 24h after a touch (tenant-configurable) |
+| LLM routing | everything (chat + embedding) through **OpenRouter**, OpenAI-compatible adapter, model as a string |
+| Agent model | per-tenant config (`model` in the `agent_versions` config), default `claude-sonnet-5` |
+| Judge 1 model | `claude-haiku-4-5`, **platform-fixed** — never per tenant (a safety gate does not weaken by customer config) |
+| Judge 1 pre-send regeneration limit | 2 · exhausted → do not send + row in `alerts` (human review) |
+| Embedding | `text-embedding-3-small`, dimension 1536 (frozen in the schema: `vector(1536)`) |
 
 ## Stack
 
