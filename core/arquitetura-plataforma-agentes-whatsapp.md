@@ -256,8 +256,9 @@ Todas com `tenant_id` + RLS (JWT, `worker_role` e `sender_role`), salvo indicaç
 ### 5.3 Drenagem pós-queda (staleness check)
 Evento com idade > 5 min: mensagem mais recente depois do evento? Pedido pago? Contato em supressão? → archive com log.
 
-### 5.4 Rate limits e proteção de contato (defaults ajustáveis)
-- Máx. 1 toque proativo/contato/24h (todas as origens); máx. 4 toques por funil; supressão automática após 3 disparos sem resposta em funis distintos; cooldown 72h entre funis.
+### 5.4 Rate limits e proteção de contato (default 1/24h · teto da plataforma 4/24h)
+- **Default:** máx. 1 toque proativo/contato/24h (todas as origens). **Teto absoluto da plataforma: 4 toques proativos/contato/24h** — afrouxar o default até o teto é ação exclusiva do admin, por tenant; o lojista no hub só pode apertar, nunca afrouxar (trava de segurança não enfraquece por config de cliente — mesmo princípio do Judge 1).
+- **Não há limite de total de toques por funil:** o total vem da cadência configurada do funil. As proteções por contato valem sempre: janela de 24h, cooldown 72h entre funis, supressão automática após 3 disparos sem resposta em funis distintos.
 - Reativas nunca bloqueadas por rate limit; anti-flood só via debounce.
 - Cloud API: token bucket por número no tier da Meta; a 80%, pausa proativos + alerta.
 
