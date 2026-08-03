@@ -250,3 +250,14 @@ def make_due(
             """,
             (overdue_seconds, last_inbound_seq, conversation_id),
         )
+
+
+def create_tenant(conn: psycopg.Connection, label: str | None = None) -> uuid.UUID:
+    """A bare tenant — enough for the runtime's RLS scope, no hub user attached."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "insert into public.tenants (id, name) values (%s, %s) returning id",
+            (uuid.uuid4(), label or unique_id("tenant")),
+        )
+        (tenant_id,) = cur.fetchone()
+    return tenant_id

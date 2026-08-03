@@ -95,9 +95,10 @@ def test_a_due_conversation_becomes_exactly_one_job(
 ) -> None:
     jobs = coalesce(admin)
 
-    # O tenant viaja no job desde a A3: o worker precisa dele antes de tudo,
-    # porque sem SET LOCAL app.tenant_id a RLS não o deixa nem ler a conversa.
-    assert jobs == [(due_thread.conversation_id, 1, 3, two_tenants.a.id)]
+    # O tenant viaja no job desde a A3; o slot otel existe desde o PR 2a e
+    # fica vazio até a T4. Cada campo entrou mudando este teste — é assim que
+    # mudança de contrato deve aparecer.
+    assert jobs == [(due_thread.conversation_id, 1, 3, two_tenants.a.id, None)]
 
     generation, deadline_cleared = conversation_state(admin, due_thread.conversation_id)
     assert (generation, deadline_cleared) == (1, True)
@@ -109,6 +110,7 @@ def test_a_due_conversation_becomes_exactly_one_job(
         "generation": 1,
         "target_seq": 3,
         "tenant_id": str(two_tenants.a.id),
+        "otel": None,
     }
 
 

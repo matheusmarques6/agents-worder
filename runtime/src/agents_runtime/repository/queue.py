@@ -25,6 +25,9 @@ class QueueMessage:
 
     id: int
     payload: dict[str, Any]
+    # How many times pgmq has handed this message out. Attempt one is the
+    # first read; the retry rules of unidade 4 are driven by this number.
+    read_count: int = 1
 
 
 class PgmqQueue:
@@ -37,6 +40,11 @@ class PgmqQueue:
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def connection(self) -> psycopg.AsyncConnection:
+        """For the loop's set_vt/DLQ plumbing — same connection, same discipline."""
+        return self._connection
 
     async def send(self, payload: Mapping[str, Any]) -> int:
         cursor = await self._connection.execute(
@@ -54,13 +62,13 @@ class PgmqQueue:
         normal case, not an error.
         """
         cursor = await self._connection.execute(
-            "select msg_id, message from pgmq.read(%s, %s::integer, 1)",
+            "select msg_id, message, read_ct from pgmq.read(%s, %s::integer, 1)",
             (self._name, visibility_timeout),
         )
         row = await cursor.fetchone()
         if row is None:
             return None
-        return QueueMessage(id=int(row[0]), payload=row[1])
+        return QueueMessage(id=int(row[0]), payload=row[1], read_count=int(row[2]))
 
     async def archive(self, message_id: int) -> bool:
         """Move the message to the archive table — the success terminal state.

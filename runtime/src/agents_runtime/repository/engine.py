@@ -1,0 +1,197 @@
+"""The engine's SQL, in the one layer allowed to hold SQL.
+
+Every statement the composition runs lives here — the fitness function
+`test_no_sql_outside_repository` is what keeps it that way. Functions take a
+connection rather than opening one: the composition owns connections and their
+roles; this layer owns what is said over them.
+
+Transactions are the caller's. `claim` and `conclude` must each be their own
+short transaction with the tenant scope set inside it (`SET LOCAL` semantics),
+so they take the connection mid-transaction and never commit.
+"""
+
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Any
+from uuid import UUID
+
+import psycopg
+from psycopg.types.json import Jsonb
+
+from agents_runtime.channels.port import ClaimedSend
+
+
+async def scope_to_tenant(conn: psycopg.AsyncConnection, tenant_id: UUID) -> None:
+    """Transaction-local tenant scope — the `SET LOCAL` discipline of ADR-11."""
+    await conn.execute(
+        "select set_config('app.tenant_id', %s, true)", (str(tenant_id),)
+    )
+
+
+# --- the conversation turn ---------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedConversation:
+    last_processed_seq: int
+    version: int
+
+
+async def claim_conversation(
+    conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID
+) -> ClaimedConversation | None:
+    cursor = await conn.execute(
+        "select * from internal.claim_conversation(%s, %s)", (conversation_id, token)
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return None
+    return ClaimedConversation(last_processed_seq=row[0], version=row[1])
+
+
+async def release_lease(
+    conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID
+) -> bool:
+    cursor = await conn.execute(
+        "select internal.release_lease(%s, %s)", (conversation_id, token)
+    )
+    return bool((await cursor.fetchone())[0])
+
+
+async def renew_lease(
+    conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID
+) -> bool:
+    cursor = await conn.execute(
+        "select internal.renew_lease(%s, %s)", (conversation_id, token)
+    )
+    return bool((await cursor.fetchone())[0])
+
+
+@dataclass(frozen=True, slots=True)
+class TurnOutcome:
+    committed: bool
+    outbound_seq: int | None
+    outbox_id: UUID | None
+
+
+async def conclude_turn(
+    conn: psycopg.AsyncConnection,
+    *,
+    conversation_id: UUID,
+    token: UUID,
+    expected_version: int,
+    generation: int,
+    target_seq: int,
+    content: dict[str, Any],
+    idempotency_key: str,
+) -> TurnOutcome:
+    cursor = await conn.execute(
+        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s)",
+        (
+            conversation_id,
+            token,
+            expected_version,
+            generation,
+            target_seq,
+            Jsonb(content),
+            idempotency_key,
+        ),
+    )
+    committed, outbound_seq, outbox_id = await cursor.fetchone()
+    return TurnOutcome(committed=committed, outbound_seq=outbound_seq, outbox_id=outbox_id)
+
+
+# --- the coalescer -----------------------------------------------------------
+
+
+async def coalesce_due_conversations(
+    conn: psycopg.AsyncConnection, *, queue: str, limit: int = 100
+) -> int:
+    """Returns how many jobs were created — the tick's only observable."""
+    cursor = await conn.execute(
+        "select count(*) from internal.coalesce_due_conversations(%s, %s)", (queue, limit)
+    )
+    return int((await cursor.fetchone())[0])
+
+
+# --- the outbox --------------------------------------------------------------
+
+
+async def claim_outbox_batch(
+    conn: psycopg.AsyncConnection, token: UUID, *, limit: int = 50
+) -> list[ClaimedSend]:
+    cursor = await conn.execute(
+        "select * from internal.claim_outbox_batch(%s, %s)", (token, limit)
+    )
+    return [
+        ClaimedSend(
+            outbox_id=row[0],
+            tenant_id=row[1],
+            channel_type=row[2],
+            channel_external_id=row[3],
+            to_phone_e164=row[4],
+            payload=row[5],
+            idempotency_key=row[6],
+            attempt_count=row[7],
+        )
+        for row in await cursor.fetchall()
+    ]
+
+
+async def mark_outbox_sent(
+    conn: psycopg.AsyncConnection, outbox_id: UUID, token: UUID, provider_message_id: str
+) -> bool:
+    cursor = await conn.execute(
+        "select internal.mark_outbox_sent(%s, %s, %s)",
+        (outbox_id, token, provider_message_id),
+    )
+    return bool((await cursor.fetchone())[0])
+
+
+async def mark_outbox_failed(
+    conn: psycopg.AsyncConnection,
+    outbox_id: UUID,
+    token: UUID,
+    *,
+    transient: bool,
+    error: str,
+    retry_in: timedelta,
+) -> bool:
+    cursor = await conn.execute(
+        "select internal.mark_outbox_failed(%s, %s, %s, %s, %s)",
+        (outbox_id, token, transient, error, retry_in),
+    )
+    return bool((await cursor.fetchone())[0])
+
+
+# --- liveness ----------------------------------------------------------------
+
+
+async def beat(conn: psycopg.AsyncConnection, process_name: str) -> None:
+    await conn.execute(
+        """
+        insert into internal.runtime_heartbeats (process_name)
+        values (%s)
+        on conflict (process_name) do update set beat_at = now()
+        """,
+        (process_name,),
+    )
+
+
+# --- queue plumbing shared with the loop --------------------------------------
+
+
+async def set_visibility(
+    conn: psycopg.AsyncConnection, queue: str, message_id: int, delay: timedelta
+) -> None:
+    await conn.execute(
+        "select pgmq.set_vt(%s, %s, %s::integer)",
+        (queue, message_id, int(delay.total_seconds())),
+    )
+
+
+async def send_to_queue(
+    conn: psycopg.AsyncConnection, queue: str, payload: dict[str, Any]
+) -> int:
+    cursor = await conn.execute("select pgmq.send(%s, %s)", (queue, Jsonb(payload)))
+    return int((await cursor.fetchone())[0])
