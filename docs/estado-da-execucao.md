@@ -6,6 +6,41 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 
 ---
 
+## Em uma tela: onde o E2 está (2026-08-03)
+
+**`main` em `438653c`. Nada pendente fora do git, nenhum PR aberto.** Suítes na
+última execução: **858** em `unit or db` · **33** em `pipeline` (1 pulado no
+Windows) · **2** em `contract` (rodaram contra a API real do OpenRouter).
+
+| Passo | Estado | PR |
+|---|---|---|
+| S0 plano · S1 rubricas · S2 migration · S3 harness · S4 prompt+think-gate | ✅ | #41–#43 |
+| S5 porta do LLM + custo + trava de rede | ✅ | #44 |
+| S6 conhecimento (pgvector, HNSW) | ✅ | #45 |
+| S7 tools autovalidantes | ✅ | #46 |
+| S8 Judge 1 pré-envio + ramo de não-envio no CAS | ✅ | #47 |
+| S9a responder real na composição | ✅ | #48 |
+| **S9b** shadow + `q_evals` + pós-envio + auto-correção | ⬜ **próximo** | — |
+| S10 observabilidade · PR-EF dívida da EF · S11 pack real · S12 provas | ⬜ | — |
+
+**O agente já responde de ponta a ponta**: mensagem entra pela ingestão, o
+coalescer cria o job, o responder carrega a versão ativa, mede o think-gate,
+busca conhecimento, compõe as camadas do RF-010, chama o modelo, passa pelo
+Judge 1 e a resposta sai pelo canal — com custo, tool e nota gravados. O que
+falta do marco é avaliação assíncrona (S9b), observabilidade (S10) e as provas
+contra o mundo real (S11/S12).
+
+**O que depende do Bruno, e só dele:**
+
+| # | Item | Bloqueia | Como entregar |
+|---|---|---|---|
+| 1 | `AGENTS_OPENROUTER_API_KEY` **na máquina nova** | suíte `contract`, S11 | `setx` no terminal dele, e reiniciar o Claude Code |
+| 2 | Logfire (write token) + Grafana Cloud (endpoint OTLP, instance ID, token) | S10 e a prova 3 das oito | mesmo caminho |
+| 3 | Token System User da Meta + `phone_number_id` de teste + os 3 secrets da Edge Function no projeto hospedado | S12 e a prova 1 do E1 | checklist da decisão 73 (~15 min no painel) |
+| 4 | Decidir se o S12 roda na VPS ou local contra o projeto hospedado | se o E0-23 entra no S10 | uma frase |
+
+---
+
 ## Onde paramos
 
 **Trilha T1 (esqueleto do monorepo) — concluída e commitada** em `eacddb3`.
@@ -135,7 +170,11 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [x] **S7 · tools com autovalidação** — decisão 86 (PR #46) · `search_knowledge` + `get_customer_context`, cada uma abrindo transação curta própria e gravando `internal.tool_calls` · 3 sabotagens de raio exato (tool confiando no `tenant_id` dos argumentos → 1 · embedding dentro da transação → 1 · falha sem rastro → 1)
 - [x] **S8 · Judge 1 pré-envio** — decisão 87 (PR #47) · regra por severidade fixada com o Bruno · `internal.conclude_turn` ganha o ramo de não-envio (aditivo, mesma assinatura) · **sabotagem-coroa medida: tirar o Judge do caminho derruba 10 testes**, as duas metades do cenário `pipeline` e os 8 do laço
 - [x] **S9a · responder real na composição** — decisão 88 (PR #48) · a costura D5 viva: carrega versão ativa, think-gate, conhecimento, camadas do RF-010, LLM medido e Judge 1, com o motor intocado · **fecha a pendência do S8** (score e alerta agora são gravados pelo responder, não pelo chamador) · 2 achados de infraestrutura e 1 de método
-- [ ] S9b shadow + `q_evals` + pós-envio + auto-correção → S9 responder real + shadow + pós-envio → S10 T4 (desbloqueada: B-1/B-2/B-3 existem) → PR-EF dívida da Edge Function → S11 pack contra LLM real → S12 provas
+- [ ] **S9b · shadow + `q_evals` + pós-envio + auto-correção** — o que falta do S9. Desenho já fixado: consumidor de `q_evals` no molde do handler de `q_domain_events` (desfechos como dado, arquiva em todos) · dentro da janela `tenants.shadow_until` **100%** das respostas enfileiram para avaliação e o eval **nunca** retém envio; fora dela, amostragem pelo `Randomness` injetado · `critical` no pós-envio → auto-correção, e **a correção é um outbound normal pela outbox que passa pelo Judge 1 como qualquer resposta** (a lei dos 100% não tem porta lateral) · exige migration nova para enfileirar a correção sem CAS (não há turno), no molde do `apply_domain_event` · sabotagem obrigatória: correção pulando o Judge → reprova
+- [ ] **S10 · T4 / observabilidade** — E0-19 compose com Alloy + redação de PII no processor · E0-20 módulo `obs/` com teste que reprova sem `service.name`/`deployment.environment` · E0-21 mesmo `trace_id` nos dois backends (fecha a prova 3 das oito) · cenário 14 (`traceparent` no slot `otel` atravessando as filas) · spans de custo a partir de `llm_calls`, **conteúdo nunca** · **é aqui que o `AGENTS_RESPONDER` do compose passa a apontar para `agents_runtime.agent_core.responder:agent_responder`**
+- [ ] **PR-EF · dívida da Edge Function `ingest-meta`** — rota (a): extrair as partes puras para `_lib/` (HMAC em tempo constante, zod estrito, ramos 401/200/500) + `deno test` + job `edge-tests` no `pr.yml` (a `main` passa a exigir **5** checks). Antes do S12, que exercita justamente essa porta
+- [ ] **S11 · pack contra o LLM real** — runner ligando pack + rubricas ao responder real e ao judge real; itera até **cada rubrica ≥ 0,85 e zero `critical`**; runs persistidos (retoma de onde parou); aprovado → versão vira `active` no tenant de teste. **Não é CI**, roda sob demanda com a chave
+- [ ] **S12 · provas do marco** — conversa real no número de teste (fecha junto a prova 1 do E1) · pack ≥ D3 · custo e latência no Logfire · cenário 14 verde · primeira execução da suíte `contract` da pendência nº 2 (se a Meta ecoa `biz_opaque_callback_data`)
 
 ### A fazer — Trilha T4 (bloqueada nos pré-requisitos do Bruno)
 
@@ -173,7 +212,65 @@ Duas regras que não mudam: **a `main` é protegida** — nada entra sem PR com 
 
 ---
 
-## Ambiente desta máquina
+## Retomada em OUTRA máquina — o que não viaja no repositório
+
+Escrito em 2026-08-03, quando o Bruno trocou de PC. **Nada aqui está no git**, por
+construção: são ferramentas, segredos e estado local. Sem esta lista, uma máquina
+nova roda `pytest` e vê tudo vermelho por motivos que não são o código.
+
+### 1. Ferramentas (as versões que funcionaram)
+
+| Ferramenta | Versão | Como instalar |
+|---|---|---|
+| git | 2.49.0 | — |
+| node | 22.17.1 | — |
+| gh (GitHub CLI) | 2.90.0 | `gh auth login` depois, senão nenhum PR abre |
+| pnpm | 11.18.0 | `npm i -g pnpm` |
+| uv | 0.11.32 | `winget install astral-sh.uv` (escopo de usuário; **não entra no PATH da sessão até reabrir o terminal**) |
+| supabase CLI | 2.111.0 | `npm i -g supabase` |
+| docker | 29.6.2 | Docker Desktop — na máquina antiga ficava em `D:\docker\Programa\`, fora do caminho padrão |
+| WSL | 2.7.11.0 | se `wsl --install` reclamar de arquivo não encontrado, é a armadilha do MSI pela metade: `winget install --id Microsoft.WSL -e --force` (o `--force` é indispensável — ver a seção do bloqueio de 2026-08-02) |
+
+### 2. Segredos que precisam ser recolocados
+
+Nenhum vive no repositório e nenhum deve. Todos são **variáveis de ambiente de
+escopo de usuário** (`setx NOME "valor"` no terminal do Bruno, **não** coladas no
+chat), e o Claude Code precisa ser reiniciado depois para enxergá-las.
+
+| Variável | Para quê | Estado em 2026-08-03 |
+|---|---|---|
+| `AGENTS_OPENROUTER_API_KEY` | suíte `contract` (S5), responder real e S11. Sem ela, o `contract` **pula sozinho** e o resto da suíte roda normal | existia na máquina antiga — **recolocar** |
+| `SUPABASE_DB_URL` | só se o banco não for o padrão local (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) | não era necessária |
+| Logfire write token · Grafana Cloud (OTLP endpoint, instance ID, token) | S10 | **nunca existiram** — pendência do Bruno |
+| `AGENTS_META_ACCESS_TOKEN` + `phone_number_id` de teste | S12 e a prova 1 do E1 | **nunca existiram** — pendência do Bruno |
+
+### 3. Ritual de primeira execução
+
+```powershell
+supabase start -x "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"
+supabase db reset                      # aplica as 13 migrations
+uv sync --directory runtime            # cria runtime/.venv
+pnpm --dir hub install
+uv run --directory runtime pytest -m "unit or db"   # esperado: 858 verdes
+uv run --directory runtime pytest -m pipeline       # esperado: 33 verdes, 1 pulado no Windows
+```
+
+**Aspas na lista do `-x` são obrigatórias** (o PowerShell trata vírgula como array e
+passa só o primeiro nome, em silêncio).
+
+### 4. Duas armadilhas que já custaram tempo
+
+- **`db` e `pipeline` NUNCA rodam ao mesmo tempo** contra o mesmo banco: o nível
+  `pipeline` limpa a base inteira entre testes (`clean_slate`). Rodar em paralelo
+  produziu 18 falhas fantasma que sumiram sozinhas em série (decisão 87).
+- **Nunca reescrever arquivo-fonte por `Get-Content`/`Set-Content`**: a leitura
+  interpreta UTF-8 como ANSI e a escrita re-codifica, corrompendo todo acento do
+  arquivo. Aconteceu no S9a com o `responder.py`; o conserto foi
+  `s.encode('cp1252').decode('utf-8')` com leitura em `utf-8-sig`.
+
+---
+
+## Ambiente da máquina antiga (histórico)
 
 | Ferramenta | Versão | Origem |
 |---|---|---|
