@@ -418,3 +418,9 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# A ingestão da Meta autentica por assinatura HMAC do corpo (x-hub-signature-256),
+# não por JWT — a Meta não manda Authorization. A verificação é a primeira coisa
+# que o handler faz, antes de tocar o banco.
+[functions.ingest-meta]
+verify_jwt = false
