@@ -1,6 +1,7 @@
 """One sender pass: claim a batch, deliver each, record each outcome.
 
-The channel port may raise; the classification rules of unidade 4 decide
+The pass opens with the unknown sweeps and then claims. The channel port may
+raise; the classification rules of unidade 4 decide
 between requeue-with-backoff and giving up. The delay is computed HERE, with
 the injected randomness — the SQL applies it but never recalculates the
 ladder, because a second copy of the canonical numbers is a divergence
@@ -33,8 +34,17 @@ async def sender_pass(
     limit: int = 50,
 ) -> int:
     """Returns how many sends were attempted — the pass's only observable."""
+    # House-keeping before claiming: a dead sender's 'sending' rows become
+    # unknown (state only, NEVER a resend), and unknowns past the review
+    # window go to a human. Running here covers the startup case for free —
+    # the first pass of a fresh process is the sweep-at-boot.
+    await engine.sweep_outbox_unknown(conn)
+    await engine.review_stale_unknown(conn, review_after=config.unknown_review_after)
+
     token = uuid.uuid4()
-    batch = await engine.claim_outbox_batch(conn, token, limit=limit)
+    batch = await engine.claim_outbox_batch(
+        conn, token, lease=config.send_lease, limit=limit
+    )
 
     for send in batch:
         try:

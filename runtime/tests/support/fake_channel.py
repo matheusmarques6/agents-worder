@@ -72,6 +72,22 @@ class FakeChannel:
                 psycopg.types.json.Jsonb(send.payload),
             ),
         )
+        # hold_after_send: the provider HAS the message (recorded above) and
+        # our process never learns it — held here until killed or released.
+        # This is the exact ambiguity the unknown state exists for, made
+        # deterministic (cenário 10).
+        while behavior == "hold_after_send":
+            cursor = await conn.execute(
+                "select behavior from testing.fake_channel_directives"
+                " where idempotency_key = %s",
+                (send.idempotency_key,),
+            )
+            row = await cursor.fetchone()
+            behavior = row[0] if row else "deliver"
+            import asyncio
+
+            await asyncio.sleep(0.05)
+
         return f"fake-wamid-{send.idempotency_key}"
 
 

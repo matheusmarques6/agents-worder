@@ -104,11 +104,25 @@ async def run_turn(
         )
     )
     try:
-        content = await respond(job)
-    finally:
-        beat.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await beat
+        try:
+            content = await respond(job)
+        finally:
+            # The beat dies FIRST, whatever happens: releasing the lease while
+            # the keepalive still shares the connection made two transactions
+            # race, and the resulting error MASKED the poison — the job that
+            # should have gone to the DLQ retried forever instead.
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+    except BaseException:
+        # The draft never existed, so the lease must not outlive the attempt.
+        # Without this release, a poisoned job reached the DLQ but left the
+        # conversation LOCKED for the whole lease — and the reprocessed job
+        # came back to BUSY until the lease expired (cenário 7, both halves).
+        async with conn.transaction():
+            await engine.scope_to_tenant(conn, job.tenant_id)
+            await engine.release_lease(conn, job.conversation_id, token)
+        raise
 
     # FASE 3 — the extended CAS. If it refuses, the draft dies here: releasing
     # the lease (only if still ours) is the ONLY side effect allowed.

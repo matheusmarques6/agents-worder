@@ -131,10 +131,14 @@ async def coalesce_due_conversations(
 
 
 async def claim_outbox_batch(
-    conn: psycopg.AsyncConnection, token: UUID, *, limit: int = 50
+    conn: psycopg.AsyncConnection,
+    token: UUID,
+    *,
+    lease: timedelta,
+    limit: int = 50,
 ) -> list[ClaimedSend]:
     cursor = await conn.execute(
-        "select * from internal.claim_outbox_batch(%s, %s)", (token, limit)
+        "select * from internal.claim_outbox_batch(%s, %s, %s)", (token, limit, lease)
     )
     return [
         ClaimedSend(
@@ -175,6 +179,30 @@ async def mark_outbox_failed(
         (outbox_id, token, transient, error, retry_in),
     )
     return bool((await cursor.fetchone())[0])
+
+
+async def sweep_outbox_unknown(conn: psycopg.AsyncConnection) -> int:
+    cursor = await conn.execute("select internal.sweep_outbox_unknown()")
+    return int((await cursor.fetchone())[0])
+
+
+async def review_stale_unknown(
+    conn: psycopg.AsyncConnection, *, review_after: timedelta
+) -> int:
+    cursor = await conn.execute(
+        "select internal.review_stale_unknown(%s)", (review_after,)
+    )
+    return int((await cursor.fetchone())[0])
+
+
+async def reprocess_dead_letters(
+    conn: psycopg.AsyncConnection, dead_letter_queue: str, origin_queue: str
+) -> int:
+    cursor = await conn.execute(
+        "select internal.reprocess_dead_letters(%s, %s)",
+        (dead_letter_queue, origin_queue),
+    )
+    return int((await cursor.fetchone())[0])
 
 
 # --- liveness ----------------------------------------------------------------
