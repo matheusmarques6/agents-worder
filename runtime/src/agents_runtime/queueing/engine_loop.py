@@ -19,6 +19,7 @@ load, not only at rest.
 """
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable
 from enum import Enum
 
@@ -65,7 +66,9 @@ class EngineLoop:
 
     async def run(self) -> None:
         cursor = 0
-        vt = int(self._config.visibility_timeout.total_seconds())
+        # Whole seconds, rounded up — pgmq truncates, and a truncated 0 means
+        # "visible immediately", the opposite of a visibility timeout.
+        vt = max(1, math.ceil(self._config.visibility_timeout.total_seconds()))
         window = sum(self._config.weights.values())
         consumed_since_reset = 0
 
