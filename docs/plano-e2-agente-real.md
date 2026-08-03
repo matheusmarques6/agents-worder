@@ -57,6 +57,8 @@ Runner: pack + rubrica → executa contra um responder → `eval_runs`/`judge_sc
 → Rodar: `-m "unit or db"`.
 
 ### S4 · agent_core — prompt em camadas, puro (1,5d)
+**Think-gate definido (decisão 81, com o Bruno em 2026-08-03):** é o **portão do raciocínio caro** — decide, ANTES de chamar o LLM, se a entrada pendente merece raciocínio estendido. Puro e determinístico, devolve decisão **e motivo como dado** (`friction | many_messages | long_message | multiple_questions | simple_input | nothing_from_the_contact`), porque "por que esta conversa pagou o caminho caro" é pergunta que o S10 faz. Precedência: atrito primeiro (reclamação curta continua sendo reclamação). Nenhum doc canônico definia o gate — arquitetura §3 e testes-e-cicd §2 só o nomeavam.
+
 Ordem literal: base → cenário por ocasião → contexto do cliente → tools → conhecimento. Seleção por `origin_occasion` — no E2 a ocasião é support/inbound; o mecanismo nasce completo, a biblioteca de ocasiões de funil chega no E3. Injeção de contexto (total de compras, ticket médio, primeira compra) · adaptação de idioma · never_say_ai · think-gate. Config = linha de `agent_versions` passada como valor. Núcleo na forma do §3 (`respond(conversation, pending_msgs) → draft`) — o adaptador para a costura do motor é o S9 (D5).
 → Testes (`unit`): um por regra da tabela §2, vermelhos primeiro · ordem das camadas como asserção literal.
 → Rodar: `-m unit` + `lint-imports`.
