@@ -281,11 +281,14 @@ async def test_scenario_6_the_keepalive_prevents_redelivery_during_long_work(
         await asyncio.sleep(4.0)
         release_gate(sync_admin, thread.conversation_id)
 
-        async def archived():
-            cursor = await admin.execute("select count(*) from pgmq.a_q_inbound")
-            return (await cursor.fetchone())[0] == 1
+        # Stop only after the reply LANDS — stopping at archive raced the
+        # sender's next poll and lost on CI (sends == 0) while winning
+        # locally. The stop condition is the last observable, not the first.
+        async def delivered():
+            cursor = await admin.execute("select count(*) from testing.fake_channel_sends")
+            return (await cursor.fetchone())[0] >= 1
 
-        await eventually(archived, note="the slow job archived")
+        await eventually(delivered, note="the slow turn's reply delivered")
     finally:
         stop.set()
         await asyncio.wait_for(running, DEADLINE)
