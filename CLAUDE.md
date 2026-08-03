@@ -79,7 +79,7 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 | Retries per queue | inbound/domain 5 · scheduled 3 · evals 2 (exp backoff + jitter) |
 | Polling weights | 8:4:2:1 · aging: domain > 2 min, scheduled > 10 min |
 | Per-tenant semaphore | 3 concurrent |
-| Proactive rate limits | 1/contact/24h · 4 touches/funnel · 72h between funnels · auto-suppress after 3 unanswered |
+| Proactive rate limits | default 1/contact/24h · platform ceiling 4/contact/24h (loosening is admin-only, per tenant; merchants can only tighten) · no per-funnel touch cap (funnel cadence config decides) · 72h between funnels · auto-suppress after 3 unanswered |
 | Evolution anti-ban | jitter 30–120 s · warm-up 20→50→100 · hard cap 300/day · copy never repeats the last one |
 | Meta tier | pause proactives at 80% + alert |
 | Message retention | rolling TTL 12–24 months (tenant config, default 12) · cancelled-merchant purge: hard delete after 10 days |
