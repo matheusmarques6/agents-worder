@@ -17,8 +17,8 @@ from typing import Any
 import psycopg
 
 from agents_runtime.agent_core.llm import EMBEDDING_MODEL, EmbedderPort
-from agents_runtime.repository import engine
 from agents_runtime.repository import knowledge as knowledge_repo
+from agents_runtime.repository.scope import scope_to_tenant
 from agents_runtime.tools.base import ToolContext, ToolResult, require_text
 
 #: How much knowledge may reach the prompt at once. Bounded because the last
@@ -45,7 +45,7 @@ class SearchKnowledge:
         embedded = await self._embedder.embed([query], model=EMBEDDING_MODEL)
 
         async with conn.transaction():
-            await engine.scope_to_tenant(conn, context.tenant_id)
+            await scope_to_tenant(conn, context.tenant_id)
             chunks = await knowledge_repo.search_knowledge(
                 conn, embedding=embedded.vectors[0], limit=self._limit
             )

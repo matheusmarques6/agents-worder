@@ -17,7 +17,7 @@ from typing import Any
 import psycopg
 
 from agents_runtime.repository import contacts as contacts_repo
-from agents_runtime.repository import engine
+from agents_runtime.repository.scope import scope_to_tenant
 from agents_runtime.tools.base import ToolContext, ToolResult
 
 
@@ -31,7 +31,7 @@ class GetCustomerContext:
         arguments: Mapping[str, Any],
     ) -> ToolResult:
         async with conn.transaction():
-            await engine.scope_to_tenant(conn, context.tenant_id)
+            await scope_to_tenant(conn, context.tenant_id)
             facts = await contacts_repo.load_customer_facts(
                 conn, conversation_id=context.conversation_id
             )

@@ -21,11 +21,11 @@ from psycopg.types.json import Jsonb
 
 from agents_runtime.channels.port import ClaimedSend
 
-
-async def scope_to_tenant(conn: psycopg.AsyncConnection, tenant_id: UUID) -> None:
-    """Transaction-local tenant scope — the `SET LOCAL` discipline of ADR-11."""
-    await conn.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
-
+# Re-exported so every caller from E1 keeps its import. The definition moved to
+# `repository.scope` because this module imports `channels.port`, and modules
+# that only needed the tenant scope were reaching the channel through it — the
+# boundary contract caught it the day the real responder was born (S9).
+from agents_runtime.repository.scope import scope_to_tenant  # noqa: F401
 
 # --- the conversation turn ---------------------------------------------------
 
