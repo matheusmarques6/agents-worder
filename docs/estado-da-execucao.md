@@ -106,6 +106,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 
 - [x] **PR-0 · fatia do schema** (#19) — 7 tabelas, schema `internal`, fábricas, 2 suítes de segurança · 3 sabotagens com raio exato
 - [x] **A1 + A2 · ingestão e contadores** (#21) — 5 sabotagens dirigidas · **achado:** a trava contra `max(seq)+1` não existia e foi criada
+- [x] **A5 · claim_outbox_batch + desfechos** — 15 asserções · 3 sabotagens (a do DEFINER derruba os 3 testes que dependem do EXECUTE do sender, colateral honesto) · linha devolvida completa, sender sem segunda query
 - [x] **A3 · lease + CAS estendido** — 17 asserções, cada condição do CAS quebrada **isoladamente** · 5 sabotagens · `tenant_id` passa a viajar no job (decisão registrada)
 - [x] **A4 · coalescer** — transação única, `SKIP LOCKED`, `generation++` · 9 asserções · 2 sabotagens · **correção do plano:** sem `SKIP LOCKED` não há job duplicado, há bloqueio (provado)
 - [x] **Unidade 4 · regras do queueing** — backoff/jitter, classificação, weighted polling, promoção por idade, limites por fila · nível `unit` em 0,5s · acaso injetado com trava de fitness própria
