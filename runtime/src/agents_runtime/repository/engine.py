@@ -89,9 +89,11 @@ async def conclude_turn(
     expected_version: int,
     generation: int,
     target_seq: int,
-    content: dict[str, Any],
+    content: dict[str, Any] | None,
     idempotency_key: str,
 ) -> TurnOutcome:
+    """`content=None` means Judge 1 refused the draft: the turn concludes, the
+    sequence advances and NOTHING goes out (S8, migration 20260803000003)."""
     cursor = await conn.execute(
         "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s)",
         (
@@ -100,7 +102,10 @@ async def conclude_turn(
             expected_version,
             generation,
             target_seq,
-            Jsonb(content),
+            # SQL NULL, not `Jsonb(None)` — the latter renders the JSON value
+            # `null`, which the function also refuses to send, but saying
+            # "there is no content" plainly is what this call means.
+            Jsonb(content) if content is not None else None,
             idempotency_key,
         ),
     )
