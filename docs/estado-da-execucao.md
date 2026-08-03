@@ -153,6 +153,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 
 ### Antes dos próximos marcos
 
+- [ ] **Antes do FECHAMENTO FORMAL do E1** — a suíte da Edge Function `ingest-meta`. Exigência da revisão do PR #32, prorrogada nos PRs #35 e #37: as 210 linhas da porta HTTP são **o único código de produção do repositório sem teste que o exija** — e são exatamente o código que a prova 1 exercita sem rede de segurança. Rota (a), recomendada: extrair as partes puras (verificação HMAC em tempo constante, zod estrito, os ramos 401-assinatura / 200-erro-da-Meta / 500-erro-nosso) e cobri-las com `deno test`, com job pequeno no gate. Rota (b): decisão registrada nomeando a fumaça do deploy de staging (E0-23) como dona dessas asserções — e aí a fumaça **precisa** cobri-las quando nascer. Registrado pelo revisor após a terceira prorrogação
 - [ ] **Antes do E1** — as duas cobranças anotadas no E0-08 (revoke por fila nova; `archive()` vira sinal na dedup), listadas no fim deste arquivo. O E1 abre escrevendo **primeiro** as suítes A1/A2 de DB e os cenários 1–10 de pipeline
 - [ ] **Antes do E2** — definir o LLM do agente
 - [ ] **Antes do E4** — escrever `core/formulario-perguntas.md` (é citado no `CLAUDE.md` e não existe); atualizar `core/telas-da-aplicacao.md` para o design; decidir o mobile (recomendação: frames só do wizard, inbox e dashboard)
