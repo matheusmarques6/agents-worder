@@ -8,6 +8,8 @@ Test data uses a per-run prefix (core/testes-e-cicd.md §3.3 item 15) so two
 runs against the same database cannot collide, and teardown removes it.
 """
 
+import asyncio
+import sys
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -17,6 +19,19 @@ import psycopg
 import pytest
 
 from tests.support.database import dsn_from_env
+
+if sys.platform == "win32":
+    # Same reason as tests/pipeline/conftest.py (decisão 28): psycopg's async
+    # connections need a selector loop and Windows defaults to proactor. Most
+    # of this level is synchronous, but the repository layer is async — the
+    # evaluation trail is written by the same code the runtime will run.
+    #
+    # The hook only EXISTS on win32: pytest-asyncio distinguishes "no
+    # implementation" from "an implementation that declines", so a hook that
+    # returned nothing elsewhere would not be the same thing as no hook.
+
+    def pytest_asyncio_loop_factories(config: pytest.Config, item: pytest.Item) -> dict:
+        return {"selector": asyncio.SelectorEventLoop}
 
 # SET ROLE cannot take a bound parameter, so the role name is never allowed to
 # come from data — only from this list.
