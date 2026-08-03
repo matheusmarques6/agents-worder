@@ -73,6 +73,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | status | text CHECK | `draft \| active \| archived` — só um `active` por tenant (índice parcial UNIQUE) |
 | origin | text CHECK | `onboarding \| bruno \| lojista \| flywheel` |
 | author_user_id | uuid FK nullable | quem criou (trilha de auditoria) |
+| model | text NOT NULL default `claude-sonnet-5` | modelo de chat DESTE tenant, roteado por OpenRouter (D1 emendado, decisão 79). CHECK de não-vazio; não é enum porque o catálogo do provedor muda mais rápido que o schema. **Judge 1 não está aqui**: é fixo da plataforma (`claude-haiku-4-5`) — portão de segurança que o cliente reconfigura não é portão |
 | base_prompt | text NOT NULL | prompt-base da arquitetura em camadas |
 | scenario_prompts | jsonb | por ocasião: `{pix_pending, checkout_abandoned, cart_abandoned, direct}` |
 | identity | jsonb | nome do agente, preset de tom (3), nível de emoji (3), blacklist de palavras, aberturas |
@@ -106,7 +107,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | client_email | text | informado ao final para criar a conta |
 | submitted_at | timestamptz | |
 
-### 2.4 `scenarios`
+### 2.4 `scenarios` **[interna]** — nasce em `internal`, com a trilha de avaliação (decisão 80)
 | Atributo | Tipo | Regras / descrição |
 |---|---|---|
 | id | uuid PK | |
@@ -127,7 +128,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | source | text CHECK | `faq \| policy \| upload` |
 | title | text | |
 | content | text NOT NULL | |
-| embedding | vector(n) | dimensão fixada pelo modelo de embedding escolhido; index HNSW |
+| embedding | vector(1536) | dimensão congelada por D2 (`text-embedding-3-small` via OpenRouter); index HNSW cosseno. O tipo carrega a dimensão de propósito: `vector` puro aceitaria qualquer coisa e só quebraria ao construir o índice |
 | metadata | jsonb | |
 | created_at | timestamptz | |
 
