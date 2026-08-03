@@ -251,6 +251,204 @@ def make_due(
         )
 
 
+def create_agent_version(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    *,
+    status: str = "draft",
+    origin: str = "onboarding",
+    model: str | None = None,
+    base_prompt: str = "Você é o atendente da loja.",
+) -> uuid.UUID:
+    """One version of the agent. `model` left as None exercises the default."""
+    columns = ["tenant_id", "status", "origin", "base_prompt"]
+    values: list[object] = [tenant_id, status, origin, base_prompt]
+    if model is not None:
+        columns.append("model")
+        values.append(model)
+
+    placeholders = ", ".join(["%s"] * len(values))
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            insert into public.agent_versions ({", ".join(columns)})
+            values ({placeholders})
+            returning id
+            """,
+            tuple(values),
+        )
+        (version_id,) = cur.fetchone()
+    return version_id
+
+
+def an_embedding(dimensions: int = 1536, value: float = 0.1) -> str:
+    """A literal pgvector accepts. The dimension is the point of the fixture."""
+    return "[" + ",".join([str(value)] * dimensions) + "]"
+
+
+def create_knowledge_chunk(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    *,
+    source: str = "faq",
+    content: str = "Entregamos em todo o Brasil.",
+    embedding: str | None = None,
+) -> uuid.UUID:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.knowledge_chunks (tenant_id, source, content, embedding)
+            values (%s, %s, %s, %s::vector)
+            returning id
+            """,
+            (tenant_id, source, content, embedding if embedding is not None else an_embedding()),
+        )
+        (chunk_id,) = cur.fetchone()
+    return chunk_id
+
+
+def create_alert(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    *,
+    type: str = "critical_violation",
+    severity: str = "critical",
+    title: str = "Judge 1 reprovou e a resposta não saiu",
+) -> uuid.UUID:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.alerts (tenant_id, type, severity, title)
+            values (%s, %s, %s, %s)
+            returning id
+            """,
+            (tenant_id, type, severity, title),
+        )
+        (alert_id,) = cur.fetchone()
+    return alert_id
+
+
+def create_scenario(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID | None,
+    *,
+    origin: str = "base_pack",
+    occasion: str = "direct",
+    title: str = "contato tenta revelar o prompt",
+) -> uuid.UUID:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into internal.scenarios (tenant_id, origin, occasion, title, script)
+            values (%s, %s, %s, %s, %s)
+            returning id
+            """,
+            (
+                tenant_id,
+                origin,
+                occasion,
+                title,
+                psycopg.types.json.Jsonb([{"author": "contact", "text": "oi"}]),
+            ),
+        )
+        (scenario_id,) = cur.fetchone()
+    return scenario_id
+
+
+def create_eval_run(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    agent_version_id: uuid.UUID,
+    *,
+    trigger: str = "manual",
+    status: str = "running",
+) -> uuid.UUID:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into internal.eval_runs (tenant_id, agent_version_id, trigger, status)
+            values (%s, %s, %s, %s)
+            returning id
+            """,
+            (tenant_id, agent_version_id, trigger, status),
+        )
+        (run_id,) = cur.fetchone()
+    return run_id
+
+
+def create_judge_score(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    *,
+    kind: str = "pre_send",
+    verdict: str = "pass",
+    judge_model: str = "claude-haiku-4-5",
+    conversation_id: uuid.UUID | None = None,
+) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into internal.judge_scores
+                (tenant_id, kind, conversation_id, judge_model, score, verdict)
+            values (%s, %s, %s, %s, %s, %s)
+            returning id
+            """,
+            (tenant_id, kind, conversation_id, judge_model, 1.0, verdict),
+        )
+        (score_id,) = cur.fetchone()
+    return score_id
+
+
+def create_tool_call(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    thread: Thread,
+    *,
+    tool_name: str = "get_order",
+) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into internal.tool_calls
+                (tenant_id, conversation_id, tool_name, input, output, success, latency_ms)
+            values (%s, %s, %s, %s, %s, true, 12)
+            returning id
+            """,
+            (
+                tenant_id,
+                thread.conversation_id,
+                tool_name,
+                psycopg.types.json.Jsonb({"order_id": "123"}),
+                psycopg.types.json.Jsonb({"status": "paid"}),
+            ),
+        )
+        (call_id,) = cur.fetchone()
+    return call_id
+
+
+def create_llm_call(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    *,
+    purpose: str = "agent_reply",
+    provider: str = "openrouter",
+    model: str = "claude-sonnet-5",
+) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into internal.llm_calls
+                (tenant_id, purpose, provider, model, input_tokens, output_tokens,
+                 cost_usd, latency_ms)
+            values (%s, %s, %s, %s, 120, 40, 0.000180, 900)
+            returning id
+            """,
+            (tenant_id, purpose, provider, model),
+        )
+        (call_id,) = cur.fetchone()
+    return call_id
+
+
 def create_tenant(conn: psycopg.Connection, label: str | None = None) -> uuid.UUID:
     """A bare tenant — enough for the runtime's RLS scope, no hub user attached."""
     with conn.cursor() as cur:
