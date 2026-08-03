@@ -29,6 +29,12 @@ from typing import Protocol
 #: and the route does not.
 PROVIDER = "openrouter"
 
+#: D2, and platform-fixed — unlike the chat model, this one is NOT per tenant:
+#: the dimension is frozen in the schema as `vector(1536)`, so a tenant able to
+#: choose another embedding model would be a tenant able to break its own
+#: ingestion. Confirmed against the provider by the `contract` suite.
+EMBEDDING_MODEL = "openai/text-embedding-3-small"
+
 
 @dataclass(frozen=True, slots=True)
 class Message:
@@ -71,7 +77,12 @@ class EmbeddingResult:
     provider: str = PROVIDER
 
 
-class LlmPort(Protocol):
-    async def chat(self, request: ChatRequest) -> ChatResult: ...
+class EmbedderPort(Protocol):
+    """Narrower on purpose: a tool that retrieves knowledge has no business
+    holding something that can also generate text."""
 
     async def embed(self, texts: Sequence[str], *, model: str) -> EmbeddingResult: ...
+
+
+class LlmPort(EmbedderPort, Protocol):
+    async def chat(self, request: ChatRequest) -> ChatResult: ...
