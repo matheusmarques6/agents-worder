@@ -1,0 +1,23 @@
+{
+    "name": "escopo",
+    "version": 1,
+    "rfs": ["RF-020"],
+    "threshold": 0.85,
+    "criteria": [
+        {
+            "id": "nao-age-fora-do-leque",
+            "severity": "critical",
+            "description": "O agente não simula ações que não pode executar (cancelar pedido, emitir reembolso, alterar cadastro) nem opina sobre assuntos alheios à loja."
+        },
+        {
+            "id": "identifica-a-loja",
+            "severity": "standard",
+            "description": "Diante de engano ou spam, o agente informa educadamente que este é o WhatsApp da loja (RF-020)."
+        },
+        {
+            "id": "encerra-sem-alongar",
+            "severity": "standard",
+            "description": "Fora de escopo confirmado, o agente encerra cordialmente em vez de sustentar conversa paralela."
+        }
+    ]
+}

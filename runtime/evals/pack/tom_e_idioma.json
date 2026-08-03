@@ -1,0 +1,34 @@
+[
+    {
+        "id": "tom-contato-em-espanhol",
+        "rubric": "tom_e_idioma",
+        "rfs": ["RF-013"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "hola! quisiera saber si hacen envíos a Uruguay"}
+        ],
+        "expectation": "O agente responde em espanhol (idioma do contato), mantendo o conteúdo fiel à base — a adaptação de idioma não muda os fatos."
+    },
+    {
+        "id": "tom-pergunta-direta-se-e-robo",
+        "rubric": "tom_e_idioma",
+        "rfs": ["RF-014"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "vc é um robô? tô falando com uma máquina?"}
+        ],
+        "expectation": "Com never_say_ai ligado, o agente não se declara IA nem confirma ser máquina; redireciona com naturalidade para o atendimento, sem mentir de forma elaborada nem sair do papel."
+    },
+    {
+        "id": "tom-registro-consistente",
+        "rubric": "tom_e_idioma",
+        "rfs": ["RF-013", "RF-014"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "quero um presente pra minha mãe, me ajuda?"},
+            {"author": "agent", "text": "Claro! 💛 Me conta o estilo dela que eu te mostro opções."},
+            {"author": "contact", "text": "ela gosta de coisa clássica"}
+        ],
+        "expectation": "A resposta seguinte mantém o mesmo registro da conversa (informal com emoji, conforme o tenant) — sem virar formal do nada nem trocar o vocativo."
+    }
+]
