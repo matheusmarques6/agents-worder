@@ -31,8 +31,8 @@ from uuid import UUID
 import psycopg
 
 from agents_runtime.clock import Clock
-from agents_runtime.repository import engine
 from agents_runtime.repository import tool_calls as tool_calls_repo
+from agents_runtime.repository.scope import scope_to_tenant
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +96,7 @@ async def run_tool(
     latency_ms = int((clock.now() - started).total_seconds() * 1000)
 
     async with conn.transaction():
-        await engine.scope_to_tenant(conn, context.tenant_id)
+        await scope_to_tenant(conn, context.tenant_id)
         await tool_calls_repo.record_tool_call(
             conn,
             tenant_id=context.tenant_id,

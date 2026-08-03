@@ -21,6 +21,11 @@ COPY src/ ./src/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
+# As rubricas do Judge 1 são ativos versionados, não código: o responder as lê
+# na largada e sem elas o portão não tem contrato. Ficam fora do pacote porque
+# são as MESMAS que o pack de evals usa — duas cópias divergiriam.
+COPY evals/ ./evals/
+
 
 FROM python:3.13-slim-bookworm AS runtime
 
@@ -35,6 +40,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /app
 COPY --from=builder --chown=runtime:runtime /app/.venv /app/.venv
 COPY --from=builder --chown=runtime:runtime /app/src /app/src
+COPY --from=builder --chown=runtime:runtime /app/evals /app/evals
 
 USER runtime
 
