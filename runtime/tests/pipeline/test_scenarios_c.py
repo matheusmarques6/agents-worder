@@ -88,11 +88,20 @@ def test_scenario_4a_a_kill_mid_turn_loses_nothing_and_doubles_nothing(
         first.kill()
 
     # Resurrection: the gate's single hold is spent, so the redelivered job
-    # sails straight through to conclusion and delivery.
+    # sails straight through to conclusion and delivery. The wait is on the
+    # LAST observables — outbox `sent` and the job archived — never on the
+    # fake's delivery record: the fake records BEFORE the sender's mark_sent,
+    # and this harness's teardown on Windows is a hard kill, so leaving on
+    # delivery raced the mark and left `sending` behind (decisão 61, again).
     with RuntimeProcess(dsn, name="c4a-second", extra_env=lease_env):
         wait_until(
-            lambda: q(dsn, "select count(*) from testing.fake_channel_sends")[0][0] == 1,
-            note="the reply delivered by the resurrected process",
+            lambda: q(
+                dsn,
+                "select (select count(*) from internal.message_outbox where status = 'sent')"
+                " + (select count(*) from pgmq.a_q_inbound)",
+            )[0][0]
+            == 2,
+            note="the reply sent and the job archived",
         )
 
     # Convergence: one outbound message, one sent outbox row, job archived

@@ -24,9 +24,7 @@ from agents_runtime.channels.port import ClaimedSend
 
 async def scope_to_tenant(conn: psycopg.AsyncConnection, tenant_id: UUID) -> None:
     """Transaction-local tenant scope — the `SET LOCAL` discipline of ADR-11."""
-    await conn.execute(
-        "select set_config('app.tenant_id', %s, true)", (str(tenant_id),)
-    )
+    await conn.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
 
 
 # --- the conversation turn ---------------------------------------------------
@@ -55,12 +53,8 @@ async def claim_conversation(
     return ClaimedConversation(last_processed_seq=row[0], version=row[1])
 
 
-async def release_lease(
-    conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID
-) -> bool:
-    cursor = await conn.execute(
-        "select internal.release_lease(%s, %s)", (conversation_id, token)
-    )
+async def release_lease(conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID) -> bool:
+    cursor = await conn.execute("select internal.release_lease(%s, %s)", (conversation_id, token))
     return bool((await cursor.fetchone())[0])
 
 
@@ -112,6 +106,31 @@ async def conclude_turn(
     )
     committed, outbound_seq, outbox_id = await cursor.fetchone()
     return TurnOutcome(committed=committed, outbound_seq=outbound_seq, outbox_id=outbox_id)
+
+
+# --- the domain event touch ----------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DomainEventOutcome:
+    """Outcomes are data (`applied`, `already_applied`, `discarded`,
+    `invalid_payload`, `no_channel`) — the handler archives on all of them.
+    A missing event raises instead: that is a bug, and bugs take the ladder."""
+
+    status: str
+    conversation_id: UUID | None
+    outbox_id: UUID | None
+
+
+async def apply_domain_event(
+    conn: psycopg.AsyncConnection, webhook_event_id: int, *, touch_text: str
+) -> DomainEventOutcome:
+    cursor = await conn.execute(
+        "select * from internal.apply_domain_event(%s, %s)",
+        (webhook_event_id, touch_text),
+    )
+    status, conversation_id, outbox_id = await cursor.fetchone()
+    return DomainEventOutcome(status=status, conversation_id=conversation_id, outbox_id=outbox_id)
 
 
 # --- the coalescer -----------------------------------------------------------
@@ -186,12 +205,8 @@ async def sweep_outbox_unknown(conn: psycopg.AsyncConnection) -> int:
     return int((await cursor.fetchone())[0])
 
 
-async def review_stale_unknown(
-    conn: psycopg.AsyncConnection, *, review_after: timedelta
-) -> int:
-    cursor = await conn.execute(
-        "select internal.review_stale_unknown(%s)", (review_after,)
-    )
+async def review_stale_unknown(conn: psycopg.AsyncConnection, *, review_after: timedelta) -> int:
+    cursor = await conn.execute("select internal.review_stale_unknown(%s)", (review_after,))
     return int((await cursor.fetchone())[0])
 
 
@@ -235,8 +250,6 @@ async def set_visibility(
     )
 
 
-async def send_to_queue(
-    conn: psycopg.AsyncConnection, queue: str, payload: dict[str, Any]
-) -> int:
+async def send_to_queue(conn: psycopg.AsyncConnection, queue: str, payload: dict[str, Any]) -> int:
     cursor = await conn.execute("select pgmq.send(%s, %s)", (queue, Jsonb(payload)))
     return int((await cursor.fetchone())[0])
