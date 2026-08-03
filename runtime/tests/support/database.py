@@ -38,6 +38,21 @@ async def as_worker(dsn: str, tenant_id: uuid.UUID) -> AsyncIterator[psycopg.Asy
 
 
 @asynccontextmanager
+async def as_runtime_worker(dsn: str) -> AsyncIterator[psycopg.AsyncConnection]:
+    """A worker connection shaped exactly like the one `app.py` builds: autocommit,
+    the role set, and **no tenant scope yet**.
+
+    `as_worker` scopes the whole connection, which is right for testing a
+    repository function. It is wrong for testing anything that has to open its
+    OWN short transaction — a tool, the responder — because the scope would
+    already be there and a tool that forgot to set it would still pass.
+    """
+    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        await conn.execute("set role worker_role")
+        yield conn
+
+
+@asynccontextmanager
 async def as_platform(dsn: str) -> AsyncIterator[psycopg.AsyncConnection]:
     """A privileged async connection — what the platform side of the product uses.
 
