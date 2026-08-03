@@ -34,3 +34,26 @@ class InboundJob:
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"malformed inbound job: {payload!r}") from error
+
+
+@dataclass(frozen=True, slots=True)
+class DomainEventJob:
+    """What ingestion enqueued: apply this platform event's consequences.
+
+    Only the id travels — tenant, type and payload live on the event row, and
+    `apply_domain_event` reads them there. A fatter job would just be a copy
+    that could drift from the truth.
+    """
+
+    webhook_event_id: int
+    otel: dict[str, Any] | None = None
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "DomainEventJob":
+        try:
+            return cls(
+                webhook_event_id=int(payload["webhook_event_id"]),
+                otel=payload.get("otel"),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"malformed domain event job: {payload!r}") from error

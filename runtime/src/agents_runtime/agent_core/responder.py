@@ -16,6 +16,10 @@ Responder = Callable[[InboundJob], Awaitable[dict[str, Any]]]
 
 FIXED_REPLY = "Recebemos sua mensagem! Já estamos cuidando do seu pedido. 🧡"
 
+# The E1 touch — what an abandonment event says until the real agent (E2) and
+# the funnel copy (E3) exist. Constant for the same reason FIXED_REPLY is.
+FIXED_TOUCH = "Vimos que ficou algo no seu carrinho! Posso ajudar a finalizar? 🧡"
+
 
 def fixed_responder(text: str = FIXED_REPLY) -> Responder:
     async def respond(job: InboundJob) -> dict[str, Any]:

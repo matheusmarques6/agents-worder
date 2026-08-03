@@ -21,13 +21,13 @@ from collections.abc import Mapping
 
 import psycopg
 
-from agents_runtime.agent_core.responder import Responder, fixed_responder
+from agents_runtime.agent_core.responder import FIXED_TOUCH, Responder, fixed_responder
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import INBOUND
+from agents_runtime.queueing import DOMAIN_EVENTS, INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
-from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.queueing.jobs import DomainEventJob, InboundJob
 from agents_runtime.queueing.sender import sender_pass
 from agents_runtime.queueing.tenant_slots import TenantSlots
 from agents_runtime.queueing.worker import TurnResult, run_turn
@@ -108,6 +108,19 @@ async def run(
 
         return handle
 
+    def domain_handler_for(conn: psycopg.AsyncConnection) -> Handler:
+        async def handle(queue_name: str, message) -> Ack:
+            job = DomainEventJob.from_payload(message.payload)
+
+            # Every outcome archives — outcomes are data, and their trail is
+            # the event row. Only an exception (bug, database down) climbs to
+            # the loop's retry ladder. No tenant slot: the cap exists for LLM
+            # turns, and this is one short SQL call.
+            await engine.apply_domain_event(conn, job.webhook_event_id, touch_text=FIXED_TOUCH)
+            return Ack.ARCHIVE
+
+        return handle
+
     connections: list[psycopg.AsyncConnection] = []
     tasks: list[asyncio.Task] = []
     try:
@@ -124,9 +137,7 @@ async def run(
         async def heartbeat() -> None:
             while not stop.is_set():
                 await engine.beat(pulse, process_name)
-                await _sleep_or_stop(
-                    clock, stop, config.process_heartbeat_every.total_seconds()
-                )
+                await _sleep_or_stop(clock, stop, config.process_heartbeat_every.total_seconds())
 
         tasks.append(asyncio.create_task(coalescer(), name="coalescer"))
         tasks.append(asyncio.create_task(heartbeat(), name="heartbeat"))
@@ -137,9 +148,12 @@ async def run(
             conn = await _connect(dsn, worker_set_role)
             connections.append(conn)
 
-            queue_names = {INBOUND, *(extra_handlers or {})}
+            queue_names = {INBOUND, DOMAIN_EVENTS, *(extra_handlers or {})}
             queues = {name: PgmqQueue(conn, name) for name in queue_names}
-            handlers: dict[str, Handler] = {INBOUND: await inbound_handler_for(conn, queues)}
+            handlers: dict[str, Handler] = {
+                INBOUND: await inbound_handler_for(conn, queues),
+                DOMAIN_EVENTS: domain_handler_for(conn),
+            }
             if extra_handlers:
                 handlers.update(extra_handlers)
 
@@ -162,9 +176,7 @@ async def run(
 
             async def sender() -> None:
                 while not stop.is_set():
-                    await sender_pass(
-                        sender_conn, channel, config=config, randomness=randomness
-                    )
+                    await sender_pass(sender_conn, channel, config=config, randomness=randomness)
                     await _sleep_or_stop(clock, stop, config.sender_poll.total_seconds())
 
             tasks.append(asyncio.create_task(sender(), name="sender"))

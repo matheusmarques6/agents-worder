@@ -94,9 +94,7 @@ def create_channel_account(
         )
         (account_id,) = cur.fetchone()
 
-    return ChannelAccount(
-        id=account_id, phone_e164=phone, external_account_id=external_account_id
-    )
+    return ChannelAccount(id=account_id, phone_e164=phone, external_account_id=external_account_id)
 
 
 def create_contact(conn: psycopg.Connection, tenant_id: uuid.UUID) -> uuid.UUID:
@@ -205,6 +203,7 @@ def create_webhook_event(
     source_account_id: str | None = None,
     external_event_id: str | None = None,
     event_type: str = "checkout_abandoned",
+    payload: dict | None = None,
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -220,7 +219,7 @@ def create_webhook_event(
                 external_event_id or unique_id("evt"),
                 tenant_id,
                 event_type,
-                psycopg.types.json.Jsonb({"raw": True}),
+                psycopg.types.json.Jsonb(payload if payload is not None else {"raw": True}),
             ),
         )
         (event_id,) = cur.fetchone()
