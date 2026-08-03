@@ -1,31 +1,35 @@
 """Process entrypoint — what `python -m agents_runtime` (the image's CMD) runs.
 
-Deliberately thin: read the environment, turn SIGTERM into "stop", hand over to
-`agents_runtime.app.run`. Everything worth testing lives below this line, in
-the composition root, where a `pipeline` test can drive it against a real queue.
+Deliberately thin: read the environment, turn SIGTERM into "stop", hand over
+to `agents_runtime.app.run`. Everything worth testing lives below this line,
+where the pipeline suite drives it against a real database.
 
-The E0 handler refuses the job instead of acknowledging it. A no-op that
-archived whatever it read would be the one failure mode this milestone exists
-to rule out — a job that disappears without anyone noticing. Until the workers
-arrive in E1, the honest behaviour is to poll an empty queue quietly and die
-loudly the moment something real shows up.
+The channel comes from `AGENTS_CHANNEL`, a `module:callable` factory that
+receives the DSN. Unset means no sender task at all — explicit, instead of a
+sender inventing outcomes against a channel that does not exist. The real
+adapters land at the end of E1; the pipeline suite points this at its fake.
 """
 
 import asyncio
+import importlib
 import os
 import signal
+import sys
 
 from agents_runtime.app import run
-from agents_runtime.repository.queue import QueueMessage
+from agents_runtime.channels.port import ChannelPort
+from agents_runtime.config import config_from_env
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
 
-async def _refuse(message: QueueMessage) -> None:
-    raise NotImplementedError(
-        f"agents-runtime: no worker exists yet for message {message.id}; "
-        "it stays in the queue. Workers arrive in E1."
-    )
+def _channel_from_env(dsn: str) -> ChannelPort | None:
+    spec = os.environ.get("AGENTS_CHANNEL")
+    if not spec:
+        return None
+    module_name, _, attribute = spec.partition(":")
+    factory = getattr(importlib.import_module(module_name), attribute)
+    return factory(dsn)
 
 
 def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
@@ -40,10 +44,24 @@ def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
 async def _serve(dsn: str) -> None:
     stop = asyncio.Event()
     _stop_on_shutdown_signals(stop)
-    await run(dsn, handle=_refuse, stop=stop)
+    await run(
+        dsn,
+        stop=stop,
+        config=config_from_env(dict(os.environ)),
+        channel=_channel_from_env(dsn),
+        process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
+        worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
+        sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
+    )
 
 
 def main() -> None:
+    # psycopg's async connections need a selector loop; Windows defaults to
+    # proactor (decisão 24, now at the entrypoint). Production is Linux, where
+    # the selector already is the default and this line changes nothing.
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     dsn = os.environ.get(DSN_VARIABLE)
     if not dsn:
         raise SystemExit(

@@ -59,3 +59,41 @@ class QueueingConfig:
     # Válido SÓ enquanto o runtime for um processo asyncio único (ADR-2). Ir a
     # multi-processo exige migrar isto para uma lease distribuída antes.
     tenant_concurrency: int = 3
+
+    # --- the composition's own rhythms (E1 · PR 2a) -------------------------
+    # A conversation someone else holds is retried shortly — 'shortly' because
+    # the other worker usually finishes within its lease, not within ours.
+    busy_retry: timedelta = timedelta(seconds=2)
+    # How long a poll loop rests when every queue it serves is empty.
+    idle_pause: timedelta = timedelta(seconds=1)
+    sender_poll: timedelta = timedelta(seconds=1)
+    # The milestone proof is 'heartbeat ≤ 3 min'; beating every 30s leaves five
+    # missed beats of slack before the alert would fire.
+    process_heartbeat_every: timedelta = timedelta(seconds=30)
+
+
+def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
+    """The canonical defaults, overridable per environment.
+
+    This exists for exactly one consumer: the pipeline suite, which runs the
+    real process with a 50ms coalescer tick instead of waiting two real
+    seconds per tick. Production sets none of these and gets the CLAUDE.md
+    table verbatim.
+    """
+
+    def _ms(name: str, fallback: timedelta) -> timedelta:
+        raw = environ.get(name)
+        return timedelta(milliseconds=int(raw)) if raw else fallback
+
+    base = QueueingConfig()
+    return QueueingConfig(
+        visibility_timeout=_ms("AGENTS_VT_MS", base.visibility_timeout),
+        heartbeat_every=_ms("AGENTS_WORK_HEARTBEAT_MS", base.heartbeat_every),
+        coalescer_tick=_ms("AGENTS_COALESCER_TICK_MS", base.coalescer_tick),
+        busy_retry=_ms("AGENTS_BUSY_RETRY_MS", base.busy_retry),
+        idle_pause=_ms("AGENTS_IDLE_PAUSE_MS", base.idle_pause),
+        sender_poll=_ms("AGENTS_SENDER_POLL_MS", base.sender_poll),
+        process_heartbeat_every=_ms(
+            "AGENTS_PROCESS_HEARTBEAT_MS", base.process_heartbeat_every
+        ),
+    )
