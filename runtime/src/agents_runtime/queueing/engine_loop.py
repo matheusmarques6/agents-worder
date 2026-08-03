@@ -8,10 +8,14 @@ left in limbo, and the E0-08 shutdown property still holds — the loop can
 only stop BETWEEN jobs.
 
 The loop keeps a belief about which queues have work, refreshed by what reads
-actually return. An empty read marks the queue quiet; when every served queue
-is quiet the loop rests and then believes in all of them again. This is what
-lets the policy function stay pure while the loop stays honest about an
-unknowable world.
+actually return. An empty read marks the queue quiet — and the belief EXPIRES:
+every full window of consumed turns, all beliefs reset to true. Without the
+expiry, a sustained inbound burst would starve a queue once marked quiet for
+the burst's whole duration (an order_paid waiting an hour to cancel a funnel —
+the exact case ADR-5 exists to prevent). The cost of the expiry is at most one
+empty read per queue per window; the guarantee is that no served queue goes
+unprobed for longer than one window, which is the 8:4:2:1 promise kept under
+load, not only at rest.
 """
 
 import asyncio
@@ -62,6 +66,8 @@ class EngineLoop:
     async def run(self) -> None:
         cursor = 0
         vt = int(self._config.visibility_timeout.total_seconds())
+        window = sum(self._config.weights.values())
+        consumed_since_reset = 0
 
         while not self._stop.is_set():
             queue_name, advanced = next_queue(self._believed, cursor, config=self._config)
@@ -77,6 +83,12 @@ class EngineLoop:
                 continue
 
             cursor = advanced
+            consumed_since_reset += 1
+            if consumed_since_reset >= window:
+                # Beliefs expire: one full window has been consumed, so every
+                # served queue earns a fresh probe (the starvation fix).
+                consumed_since_reset = 0
+                self._believed = dict.fromkeys(self._handlers, True)
             # From here, finishing the message is the only way out — no
             # shutdown check until it is archived, delayed or dead-lettered.
             await self._dispatch(queue_name, message)

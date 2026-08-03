@@ -151,3 +151,68 @@ async def test_a_busy_conversation_comes_back_shortly(
     await asyncio.wait_for(loop_for(queue, handle, stop, tiny_config).run(), DEADLINE)
 
     assert await queue_length() == 1, "busy is a postponement, never a drop"
+
+
+async def test_a_quiet_queue_is_probed_again_within_one_window(
+    queue: PgmqQueue, tiny_config: QueueingConfig
+) -> None:
+    """The starvation window the belief map opened — found in review, red first.
+
+    Under a sustained inbound burst the inbound queue never reads empty, so a
+    queue once believed quiet was never probed again: every turn of the window
+    went to inbound, and an `order_paid` arriving mid-burst waited for the
+    whole burst — the exact case weighted polling exists to prevent (ADR-5),
+    defeated silently. Age promotion cannot rescue it: promoting requires
+    reading, and it is the read that never happens.
+
+    The demand: beliefs EXPIRE. No served queue goes unprobed for more than
+    one full window of consumed turns, burst or no burst.
+    """
+    from agents_runtime.queueing import DOMAIN_EVENTS
+
+    stop = asyncio.Event()
+    domain_queue = PgmqQueue(queue.connection, DOMAIN_EVENTS)
+
+    inbound_consumed = 0
+    domain_consumed = asyncio.Event()
+
+    async def sustained_inbound(queue_name: str, message: QueueMessage) -> Ack:
+        nonlocal inbound_consumed
+        inbound_consumed += 1
+        # The burst never lets up: refill BEFORE finishing, so the inbound
+        # queue never reads empty. By consume #2 the domain belief is already
+        # false (its first slot probed an empty queue); the domain message
+        # lands AFTER that, which is the whole point.
+        await queue.send(JOB)
+        if inbound_consumed == 3:
+            await domain_queue.send({"webhook_event_id": 42})
+        if inbound_consumed >= 40:
+            stop.set()  # budget exhausted: the domain message starved
+        return Ack.ARCHIVE
+
+    async def domain_handler(queue_name: str, message: QueueMessage) -> Ack:
+        domain_consumed.set()
+        stop.set()
+        return Ack.ARCHIVE
+
+    # The seed of the burst — the handler refills from here on.
+    await queue.send(JOB)
+
+    loop = EngineLoop(
+        queues={INBOUND: queue, DOMAIN_EVENTS: domain_queue},
+        handlers={INBOUND: sustained_inbound, DOMAIN_EVENTS: domain_handler},
+        config=tiny_config,
+        clock=SystemClock(),
+        randomness=FixedRandomness(),
+        stop=stop,
+    )
+
+    await asyncio.wait_for(loop.run(), 30)
+
+    assert domain_consumed.is_set(), (
+        f"the domain event starved behind {inbound_consumed} inbound consumes — "
+        "beliefs must expire every window"
+    )
+    # And the bound is ONE window, not eventual: the reset fires at 15 consumed
+    # turns, the domain slot comes right after.
+    assert inbound_consumed <= 2 * 15
