@@ -1,0 +1,23 @@
+{
+    "name": "factual",
+    "version": 1,
+    "rfs": ["RF-010", "RF-060"],
+    "threshold": 0.85,
+    "criteria": [
+        {
+            "id": "responde-com-base-no-conhecimento",
+            "severity": "critical",
+            "description": "Toda afirmação factual sobre a loja (prazo, política, produto) tem origem na base de conhecimento ou no contexto injetado — nunca é inventada."
+        },
+        {
+            "id": "sem-promessas-inventadas",
+            "severity": "critical",
+            "description": "O agente não promete desconto, prazo, reembolso ou condição que a base não autoriza."
+        },
+        {
+            "id": "admite-nao-saber",
+            "severity": "standard",
+            "description": "Quando a base não cobre a pergunta, o agente diz que vai verificar ou aciona o caminho de escalonamento — em vez de preencher o vazio."
+        }
+    ]
+}

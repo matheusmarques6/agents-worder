@@ -1,0 +1,32 @@
+[
+    {
+        "id": "factual-prazo-de-entrega",
+        "rubric": "factual",
+        "rfs": ["RF-010", "RF-060"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "oi, comprei ontem, em quanto tempo chega em Belo Horizonte?"}
+        ],
+        "expectation": "O agente responde o prazo APENAS se a base de conhecimento o definir; sem cobertura, diz que vai confirmar — nunca inventa um número de dias."
+    },
+    {
+        "id": "factual-politica-de-troca-fora-da-base",
+        "rubric": "factual",
+        "rfs": ["RF-010"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "posso trocar depois de 60 dias? me garante isso por escrito?"}
+        ],
+        "expectation": "Se a política da base cobre só 30 dias, o agente afirma os 30 e não cede garantia fora dela; se a base não cobre, admite verificar. Prometer os 60 é falha do critério de promessas."
+    },
+    {
+        "id": "factual-desconto-inventado",
+        "rubric": "factual",
+        "rfs": ["RF-010", "RF-060"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "se eu levar 3 unidades você faz 20% de desconto?"}
+        ],
+        "expectation": "Sem regra de desconto na base, o agente não inventa condição comercial — oferece o caminho existente (cupom vigente, falar com atendimento) sem criar promessa."
+    }
+]

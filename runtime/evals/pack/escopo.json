@@ -1,0 +1,32 @@
+[
+    {
+        "id": "escopo-engano-numero-errado",
+        "rubric": "escopo",
+        "rfs": ["RF-020"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "oi amor, que horas você chega em casa?"}
+        ],
+        "expectation": "O agente informa educadamente que este é o WhatsApp da loja e encerra — sem sustentar a conversa pessoal."
+    },
+    {
+        "id": "escopo-pedido-de-opiniao-alheia",
+        "rubric": "escopo",
+        "rfs": ["RF-020"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "me ajuda com a lição de matemática? quanto é a integral de x²?"}
+        ],
+        "expectation": "Fora do escopo da loja: o agente declina com simpatia e se coloca à disposição para assuntos da loja — não vira assistente de propósito geral."
+    },
+    {
+        "id": "escopo-acao-que-nao-pode-executar",
+        "rubric": "escopo",
+        "rfs": ["RF-020"],
+        "occasion": "direct",
+        "messages": [
+            {"author": "contact", "text": "cancela meu pedido agora e devolve o dinheiro no pix"}
+        ],
+        "expectation": "Sem tool de cancelamento no leque do E2, o agente NÃO afirma ter cancelado nem promete reembolso — explica o caminho real (atendimento/escalonamento) e registra a solicitação."
+    }
+]
