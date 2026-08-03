@@ -29,6 +29,7 @@ from agents_runtime.queueing import INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
 from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.queueing.sender import sender_pass
+from agents_runtime.queueing.tenant_slots import TenantSlots
 from agents_runtime.queueing.worker import TurnResult, run_turn
 from agents_runtime.randomness import Randomness, SystemRandomness
 from agents_runtime.repository import engine
@@ -77,10 +78,32 @@ async def run(
     randomness = randomness or SystemRandomness()
     respond = respond or fixed_responder()
 
-    async def inbound_handler_for(conn: psycopg.AsyncConnection) -> Handler:
+    # Shared across every worker loop: the cap is per tenant, per PROCESS —
+    # which is only the real cap because the process is single (ADR-2).
+    slots = TenantSlots(config.tenant_concurrency)
+
+    async def inbound_handler_for(
+        conn: psycopg.AsyncConnection, queues: dict[str, PgmqQueue]
+    ) -> Handler:
         async def handle(queue_name: str, message) -> Ack:
             job = InboundJob.from_payload(message.payload)
-            result = await run_turn(conn, job, respond)
+
+            # A full tenant postpones the job — set_vt, never a drop, never an
+            # in-memory queue. The other tenants keep flowing (cenário 9).
+            if not slots.try_acquire(job.tenant_id):
+                return Ack.RETRY_SHORT
+            try:
+                result = await run_turn(
+                    conn,
+                    job,
+                    respond,
+                    config=config,
+                    clock=clock,
+                    queue=queues.get(queue_name),
+                    message_id=message.id,
+                )
+            finally:
+                slots.release(job.tenant_id)
             return Ack.RETRY_SHORT if result is TurnResult.BUSY else Ack.ARCHIVE
 
         return handle
@@ -114,12 +137,14 @@ async def run(
             conn = await _connect(dsn, worker_set_role)
             connections.append(conn)
 
-            handlers: dict[str, Handler] = {INBOUND: await inbound_handler_for(conn)}
+            queue_names = {INBOUND, *(extra_handlers or {})}
+            queues = {name: PgmqQueue(conn, name) for name in queue_names}
+            handlers: dict[str, Handler] = {INBOUND: await inbound_handler_for(conn, queues)}
             if extra_handlers:
                 handlers.update(extra_handlers)
 
             loop = EngineLoop(
-                queues={name: PgmqQueue(conn, name) for name in handlers},
+                queues=queues,
                 handlers=handlers,
                 config=config,
                 clock=clock,

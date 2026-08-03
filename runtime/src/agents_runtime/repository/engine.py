@@ -10,6 +10,7 @@ short transaction with the tenant scope set inside it (`SET LOCAL` semantics),
 so they take the connection mid-transaction and never commit.
 """
 
+import math
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -38,10 +39,15 @@ class ClaimedConversation:
 
 
 async def claim_conversation(
-    conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID
+    conn: psycopg.AsyncConnection,
+    conversation_id: UUID,
+    token: UUID,
+    *,
+    lease: timedelta,
 ) -> ClaimedConversation | None:
     cursor = await conn.execute(
-        "select * from internal.claim_conversation(%s, %s)", (conversation_id, token)
+        "select * from internal.claim_conversation(%s, %s, %s)",
+        (conversation_id, token, lease),
     )
     row = await cursor.fetchone()
     if row is None:
@@ -59,10 +65,17 @@ async def release_lease(
 
 
 async def renew_lease(
-    conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID
+    conn: psycopg.AsyncConnection,
+    conversation_id: UUID,
+    token: UUID,
+    *,
+    lease: timedelta,
 ) -> bool:
+    # The lease length always travels from config — the SQL default exists for
+    # hand runs, and letting it win here once turned an immediate first beat
+    # into a two-minute lease under a 200ms test config (cenário 5, flaky).
     cursor = await conn.execute(
-        "select internal.renew_lease(%s, %s)", (conversation_id, token)
+        "select internal.renew_lease(%s, %s, %s)", (conversation_id, token, lease)
     )
     return bool((await cursor.fetchone())[0])
 
@@ -184,9 +197,13 @@ async def beat(conn: psycopg.AsyncConnection, process_name: str) -> None:
 async def set_visibility(
     conn: psycopg.AsyncConnection, queue: str, message_id: int, delay: timedelta
 ) -> None:
+    # pgmq speaks whole seconds. Truncating would turn any sub-second delay
+    # into ZERO — a message visible again immediately, which under a tiny test
+    # VT showed up as read_ct = 11 on a single job. Rounding UP keeps 'hidden
+    # for at least this long' true at every granularity.
     await conn.execute(
         "select pgmq.set_vt(%s, %s, %s::integer)",
-        (queue, message_id, int(delay.total_seconds())),
+        (queue, message_id, max(1, math.ceil(delay.total_seconds()))),
     )
 
 

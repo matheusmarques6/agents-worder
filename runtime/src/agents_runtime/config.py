@@ -35,6 +35,11 @@ class QueueingConfig:
     visibility_timeout: timedelta = timedelta(seconds=60)
     heartbeat_every: timedelta = timedelta(seconds=45)
 
+    # A lease da conversa (ADR-6): renovável pelo heartbeat acima enquanto a
+    # FASE 2 durar. Vencida, é lease livre — é assim que o trabalho de um
+    # processo morto volta a ser feito.
+    conversation_lease: timedelta = timedelta(minutes=2)
+
     # Debounce da entrada e o tique do coalescer.
     inbound_debounce: timedelta = timedelta(seconds=10)
     coalescer_tick: timedelta = timedelta(seconds=2)
@@ -89,6 +94,7 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
     return QueueingConfig(
         visibility_timeout=_ms("AGENTS_VT_MS", base.visibility_timeout),
         heartbeat_every=_ms("AGENTS_WORK_HEARTBEAT_MS", base.heartbeat_every),
+        conversation_lease=_ms("AGENTS_LEASE_MS", base.conversation_lease),
         coalescer_tick=_ms("AGENTS_COALESCER_TICK_MS", base.coalescer_tick),
         busy_retry=_ms("AGENTS_BUSY_RETRY_MS", base.busy_retry),
         idle_pause=_ms("AGENTS_IDLE_PAUSE_MS", base.idle_pause),

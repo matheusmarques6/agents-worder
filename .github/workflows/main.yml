@@ -44,8 +44,12 @@ jobs:
           python-version: "3.13"
 
       - uses: supabase/setup-cli@v3
+        # Pinned after the 15-minute hang of run 30776648253: 'latest' resolves
+        # on every run, and the resolution is what flaked. 2.111.0 is also what
+        # the development machine runs — one less axis of drift.
+        timeout-minutes: 3
         with:
-          version: latest
+          version: 2.111.0
 
       - name: Start the lean stack
         run: supabase start -x "$SUPABASE_EXCLUDE"

@@ -23,6 +23,7 @@ from agents_runtime.queueing import ALL_QUEUES, INBOUND
 from agents_runtime.repository.queue import PgmqQueue
 from tests.support.database import dsn_from_env
 from tests.support.fake_channel import SCHEMA_SQL
+from tests.support.holdable import GATE_SQL
 from tests.support.runtime_process import TINY_INTERVALS
 
 if sys.platform == "win32":
@@ -59,6 +60,7 @@ def _testing_schema(dsn: str) -> None:
     """The fake channel's tables. Test-only, created here, never by a migration."""
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(SCHEMA_SQL)
+        conn.execute(GATE_SQL)
 
 
 @pytest.fixture(autouse=True)
@@ -74,7 +76,10 @@ def clean_slate(dsn: str, _testing_schema: None) -> Iterator[None]:
                 )
             conn.execute("truncate internal.message_outbox, internal.webhook_events cascade")
             conn.execute("truncate internal.runtime_heartbeats")
-            conn.execute("truncate testing.fake_channel_sends, testing.fake_channel_directives")
+            conn.execute(
+                "truncate testing.fake_channel_sends, testing.fake_channel_directives,"
+                " testing.responder_gate"
+            )
             # Cascades through contacts, conversations, messages and accounts.
             conn.execute("truncate public.tenants cascade")
 
