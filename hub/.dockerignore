@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.next-production-check/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+e2e/__screenshots__/
+npm-debug.log*
+pnpm-debug.log*
