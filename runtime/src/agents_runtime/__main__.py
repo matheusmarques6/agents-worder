@@ -19,6 +19,7 @@ import sys
 from agents_runtime.app import run
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.config import config_from_env
+from agents_runtime.connectors.port import ConnectorPort
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
@@ -79,6 +80,44 @@ def _channel_from_env(dsn: str) -> ChannelPort | None:
     return _factory_from_env("AGENTS_CHANNEL", dsn)
 
 
+#: The connector seam (S8). `platform=module:callable` pairs, comma separated:
+#:
+#:     AGENTS_CONNECTORS=shopify=agents_runtime.connectors.shopify:from_env
+#:
+#: A map and not a single factory, because the reconciliation dispatches on
+#: `connector_accounts.platform` — a deployment with Shopify and Nuvemshop
+#: connected has two adapters and one sweep.
+CONNECTORS_VARIABLE = "AGENTS_CONNECTORS"
+
+
+def _connectors_from_env(dsn: str) -> dict[str, ConnectorPort]:
+    """Unset means no reconciliation task at all — the channel's reading, not
+    the responder's.
+
+    Absent is SAFE here: without a sweep the webhook is still the primary path
+    and nothing is invented; a sweep with no adapter would claim every store on
+    every tick and close them all `error`, turning "not configured yet" into a
+    hub full of red. Broken, though, is not absent: a spec that does not import
+    dies at startup, where a human is watching.
+    """
+    spec = os.environ.get(CONNECTORS_VARIABLE, "")
+    connectors: dict[str, ConnectorPort] = {}
+    for entry in (part.strip() for part in spec.split(",")):
+        if not entry:
+            continue
+        platform, separator, factory_spec = entry.partition("=")
+        if not separator or not factory_spec.strip():
+            raise RuntimeError(
+                f"{CONNECTORS_VARIABLE} malformado em {entry!r}: "
+                "esperado plataforma=modulo:callable"
+            )
+        module_name, _, attribute = factory_spec.strip().partition(":")
+        connectors[platform.strip()] = getattr(
+            importlib.import_module(module_name), attribute
+        )(dsn)
+    return connectors
+
+
 def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
     loop = asyncio.get_running_loop()
     for received in (signal.SIGINT, signal.SIGTERM):
@@ -96,6 +135,7 @@ async def _serve(dsn: str) -> None:
         stop=stop,
         config=config_from_env(dict(os.environ)),
         channel=_channel_from_env(dsn),
+        connectors=_connectors_from_env(dsn),
         # The responder seam, reachable from outside the process: cenário 4
         # holds a REAL subprocess inside FASE 2 through this.
         respond=_factory_from_env(RESPONDER_VARIABLE, dsn, required=True, refusal=_NO_RESPONDER),
@@ -103,6 +143,7 @@ async def _serve(dsn: str) -> None:
         process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
         worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
+        reconcile_set_role=os.environ.get("AGENTS_RECONCILE_SET_ROLE"),
     )
 
 
