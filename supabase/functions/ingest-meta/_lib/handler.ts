@@ -36,8 +36,9 @@ export interface Deps {
   appSecret: string;
   verifyToken: string;
   port: IngestPort;
-  /** Where a 500 gets reported. Injected so a test can watch it instead of the
-   * terminal; production keeps `console.error`. */
+  /** Where a 500 — and an off-format payload — gets reported. Injected so a
+   * test can watch it instead of the terminal; production keeps
+   * `console.error`. */
   onError?: (error: unknown) => void;
 }
 

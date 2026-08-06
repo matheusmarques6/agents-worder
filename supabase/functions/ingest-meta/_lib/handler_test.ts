@@ -176,7 +176,7 @@ Deno.test("a database that fails is 500 — Meta redelivers, ingestion is idempo
 
 Deno.test("a signature check that throws is 500, not a silent 200", async () => {
   const port = recorder();
-  const broken = new Request(URL_, { method: "POST", body: JSON.stringify(TEXT_EVENT) });
+  const broken = new Request(URL_, { method: "POST" });
   // A body that cannot be read at all — the failure happens before any branch.
   Object.defineProperty(broken, "text", {
     value: () => Promise.reject(new Error("stream closed")),
