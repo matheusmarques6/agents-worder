@@ -74,6 +74,26 @@ TIER_PAUSE_FRACTION = 0.8
 admin is alerted. Reactive replies keep flowing — they never reach this
 module."""
 
+DENIAL_REASONS = (
+    "suppressed_block",
+    "suppressed_silence",
+    "suppressed_optout",
+    "quota_exceeded",
+    "stale_newer_message",
+    "stale_order_paid",
+    "rate_limit_24h",
+    "funnel_cooldown_72h",
+    "channel_paused_tier",
+)
+"""Every reason `decide` can return other than `allowed`, in rung order.
+
+Exported because it is a **contract with the schema**, not documentation: S2
+materialises it as the CHECK on `scheduled_touches.cancel_reason` (plus
+`manual`, the one cancellation a human causes and the ladder never produces),
+and `tests/db/test_e3_schema.py` reads this tuple rather than retyping it. A
+reason added here and not there is a cancellation that fails at 3am; a value
+added there and not here is a metric bucket nothing can ever fill."""
+
 #: `suppression_list.reason` (dicionário §4.4) → the ladder's vocabulary. An
 #: operator's `manual` block is the same event to the contact as an explicit
 #: block, so it lands on the same reason rather than inventing a fourth.
