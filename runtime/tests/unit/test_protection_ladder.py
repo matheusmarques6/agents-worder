@@ -137,18 +137,55 @@ class TestStaleness:
         assert decision.allow is False
         assert decision.reason == "stale_order_paid"
 
-    def test_an_event_younger_than_five_minutes_skips_the_staleness_check(self) -> None:
-        """Literal RF-032: the check is for a LATE event (> 5 min). It is not a
-        blind spot in practice — a scheduled touch is always hours old — and the
-        first touch of a funnel is fired from the event itself, where nothing
-        can have happened in between yet."""
+    def test_a_fresh_event_is_still_checked_against_a_newer_message(self) -> None:
+        """Deliberately stricter than the letter of RF-032, which asks for the
+        check on a LATE event (> 5 min): that describes when the check became
+        NECESSARY — draining after an outage — not permission to skip a
+        protection while the event is fresh. A contact who wrote 30 seconds ago
+        is in a live conversation the agent is already answering by reaction;
+        a funnel touch on top of that is precisely what annoys the person we
+        were trying to recover. Being stricter than the RF only ever suppresses
+        a send — it can never create one.
+
+        It stopped being theoretical with S3: the first touch of a funnel is
+        born as a `scheduled_touch` already due, so the fresh path IS the normal
+        path."""
         fresh = NOW - timedelta(minutes=4)
         decision = decide(
             _touch(event_at=fresh, last_inbound_at=fresh + timedelta(seconds=30)),
             _clock(),
         )
 
-        assert decision.allow is True
+        assert decision.allow is False
+        assert decision.reason == "stale_newer_message"
+
+    def test_a_fresh_event_is_still_checked_against_a_paid_order(self) -> None:
+        """The other half of the same divergence: the first touch of a funnel is
+        fired seconds after the event, and `order_paid` arriving in those
+        seconds is a race the ladder must lose towards silence."""
+        decision = decide(
+            _touch(event_at=NOW - timedelta(minutes=4), order_paid=True),
+            _clock(),
+        )
+
+        assert decision.allow is False
+        assert decision.reason == "stale_order_paid"
+
+    def test_staleness_does_not_depend_on_when_the_question_is_asked(self) -> None:
+        """The consequence of dropping the age gate, stated as an invariant: the
+        same facts produce the same denial whether the event is four minutes or
+        four days old."""
+        clock = _clock()
+        fresh = decide(
+            _touch(event_at=NOW - timedelta(minutes=4), last_inbound_at=NOW - timedelta(minutes=3)),
+            clock,
+        )
+        ancient = decide(
+            _touch(event_at=NOW - timedelta(days=4), last_inbound_at=NOW - timedelta(days=3)),
+            clock,
+        )
+
+        assert fresh.reason == ancient.reason == "stale_newer_message"
 
 
 class TestRateLimits:
@@ -343,8 +380,11 @@ class TestGuards:
 
 
 class TestTheInjectedClock:
-    """The 24h, 72h and 5min windows are read from the injected clock — no test
-    here waits, and `test_no_direct_clock` fails the build if that ever slips."""
+    """The 24h and 72h windows are read from the injected clock — no test here
+    waits, and `test_no_direct_clock` fails the build if that ever slips.
+
+    Staleness is no longer among them: dropping the 5-minute age gate took the
+    clock out of that rung entirely, which is asserted in `TestStaleness`."""
 
     def test_the_funnel_cooldown_expires_by_moving_the_clock(self) -> None:
         snapshot = _touch(other_funnel_touch_at=NOW - timedelta(hours=71))
@@ -355,14 +395,3 @@ class TestTheInjectedClock:
         clock.advance(timedelta(hours=1, seconds=1))
 
         assert decide(snapshot, clock).allow is True
-
-    def test_the_staleness_window_opens_by_moving_the_clock(self) -> None:
-        fresh = NOW - timedelta(minutes=4)
-        snapshot = _touch(event_at=fresh, last_inbound_at=fresh + timedelta(seconds=30))
-        clock = _clock()
-
-        assert decide(snapshot, clock).allow is True
-
-        clock.advance(timedelta(minutes=2))
-
-        assert decide(snapshot, clock).reason == "stale_newer_message"

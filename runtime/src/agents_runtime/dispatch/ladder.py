@@ -17,6 +17,12 @@ limites (`CLAUDE.md`, "Runtime discipline"). It is not cosmetic. A suppressed
 contact reported as "hit the rate limit" sends the operator to the wrong screen
 and implies the touch goes out tomorrow, when in fact it never goes out again.
 
+**One deliberate divergence from the letter of a requirement**, recorded here
+because a rule that silently disagrees with its own doc is worse than either:
+RF-032 asks for the staleness check on an event older than 5 minutes; the ladder
+runs it always. The reasoning is in `STALE_AFTER`. Being stricter than the
+requirement can only suppress a send, never create one.
+
 **The guards are why this step exists on its own** (decision D2 of the E3
 plan). Deciding and writing are different instants, so the ladder is a TOCTOU by
 construction; the answer is not to hold a transaction open across the decision —
@@ -35,8 +41,16 @@ from agents_runtime.clock import Clock
 from agents_runtime.quota import Allowance
 
 STALE_AFTER = timedelta(minutes=5)
-"""RF-032 / arquitetura §5.3: an event older than this is re-checked against
-what happened while it waited. Below it there is nothing to have happened."""
+"""RF-032 / arquitetura §5.3 ask for the staleness check on a LATE event — one
+older than this. Documentation only: the ladder is **deliberately stricter** and
+checks unconditionally. The age describes when the check became NECESSARY
+(draining a queue after an outage), not permission to skip a protection while
+the event is fresh — and since S3 the first touch of a funnel is born as a
+`scheduled_touch` already due, so the fresh path IS the normal path. A contact
+who wrote 30 seconds ago is in a live conversation the agent is already
+answering by reaction; a funnel touch on top of that is exactly what annoys the
+person we were trying to recover. Being stricter than the RF can only ever
+suppress a send, never create one."""
 
 PROACTIVE_WINDOW = timedelta(hours=24)
 """RF-034: the rolling window the per-contact touch count is measured over.
@@ -86,8 +100,8 @@ class ProactiveTouch:
 
     event_at: datetime
     """When the fact that justifies this touch happened — the abandonment, the
-    unpaid PIX — not when the touch was scheduled. RF-032 measures the age of
-    the EVENT."""
+    unpaid PIX — not when the touch was scheduled. It is the instant "newer"
+    is measured against, not an age: see `STALE_AFTER`."""
 
     inbound_seq: int = 0
     """`conversations.next_inbound_seq` as read. Not used by any rule: it is the
@@ -215,16 +229,17 @@ def decide(snapshot: ProactiveTouch, clock: Clock) -> Decision:
     if not quota.has_headroom(snapshot.quota):
         return denied("quota_exceeded")
 
-    # 3. Staleness (RF-032, arquitetura §5.3) — only for a LATE event. A touch
-    #    fired straight off a fresh event has no meantime for anything to have
-    #    happened in; a scheduled touch is always hours old and always checked.
-    if now - snapshot.event_at > STALE_AFTER:
-        # The contact talking outranks the payment: it is the fact that turns
-        # this funnel into a conversation (D7), and the one an operator needs.
-        if snapshot.last_inbound_at is not None and snapshot.last_inbound_at > snapshot.event_at:
-            return denied("stale_newer_message")
-        if snapshot.order_paid:
-            return denied("stale_order_paid")
+    # 3. Staleness (RF-032, arquitetura §5.3) — unconditionally, without the
+    #    5-minute age gate the letter of the RF describes. See STALE_AFTER: the
+    #    age says when the check became necessary, not when it may be skipped.
+    #    The consequence is that this rung does not read the clock at all.
+    #
+    #    The contact talking outranks the payment: it is the fact that turns this
+    #    funnel into a conversation (D7), and the one an operator needs.
+    if snapshot.last_inbound_at is not None and snapshot.last_inbound_at > snapshot.event_at:
+        return denied("stale_newer_message")
+    if snapshot.order_paid:
+        return denied("stale_order_paid")
 
     # 4. Limits (RF-034, RF-035). Contact protections first, channel last: the
     #    tier pause is transient and belongs to the number, while the per-contact
