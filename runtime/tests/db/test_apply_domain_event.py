@@ -110,9 +110,22 @@ def abandonment(
 def test_an_unsupported_event_type_is_discarded(
     admin: psycopg.Connection, two_tenants: TwoTenants, number: ChannelAccount
 ) -> None:
-    # `order_paid` cancela funil no E3 — hoje ele é deliberadamente descartado,
-    # com rastro. Descartar ≠ falhar: reprocessar não mudaria o resultado.
-    event_id = abandonment(admin, two_tenants.a.id, event_type="order_paid")
+    # Descartar ≠ falhar: reprocessar um tipo sem handler não mudaria o
+    # resultado, então o evento leva rastro (`discarded`) e não a escada de
+    # retry até uma DLQ que nunca mudaria de ideia.
+    #
+    # O exemplo era `order_paid` até o E3 S5, e escolhê-lo foi um erro de
+    # engenharia: ele era o caso POSITIVO do passo seguinte deste mesmo marco,
+    # então o dia em que o pagamento ganhou handler este teste passou a afirmar
+    # o contrário do produto. O invariante ("tipo sem handler é descartado, com
+    # rastro, sem tocar em nada") continua idêntico; só a ilustração foi
+    # trocada, com autorização explícita do Bruno.
+    #
+    # Regra adotada no marco a partir daqui: **exemplo de caso negativo nunca é
+    # o caso positivo do passo seguinte.** `theme_published` é um tópico real da
+    # Shopify e não está na fila de nenhum passo do E0–E8 — nada neste produto
+    # vai reagir a um tema publicado.
+    event_id = abandonment(admin, two_tenants.a.id, event_type="theme_published")
 
     status, conversation_id, outbox_id = apply_event(admin, event_id)
 
