@@ -261,6 +261,7 @@ uv sync --directory runtime            # cria runtime/.venv
 pnpm --dir hub install
 uv run --directory runtime pytest -m "unit or db"   # esperado: 858 verdes
 uv run --directory runtime pytest -m pipeline       # esperado: 33 verdes, 1 pulado no Windows
+pnpm --dir hub exec playwright install chromium     # os navegadores NÃO vêm no pnpm install
 ```
 
 **Aspas na lista do `-x` são obrigatórias** (o PowerShell trata vírgula como array e
