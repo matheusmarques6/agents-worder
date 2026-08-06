@@ -85,6 +85,24 @@ docker compose up --build
 
 5. Abra o hub em `http://localhost:3000`.
 
+## A stack e as suites de teste nao rodam juntas
+
+O container `runtime` consome as mesmas filas do banco local que o nivel
+`pipeline` usa. Com ele de pe, um job criado por um teste pode ser reivindicado
+pelo container antes do teste chegar nele: o cenario 4a falha com
+`predicate never became true: the turn held inside FASE 2`, uma mensagem que
+parece defeito do motor e nao e.
+
+Antes de rodar `pytest -m pipeline`, pare o runtime da stack:
+
+```powershell
+docker compose stop runtime
+```
+
+Devolva depois com `docker compose start runtime`. E a mesma regra que ja vale
+entre os niveis `db` e `pipeline`: quem escreve no mesmo banco disputa o mesmo
+estado.
+
 ## Operacao
 
 Ver logs:
