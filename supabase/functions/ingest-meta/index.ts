@@ -71,12 +71,28 @@ async function signatureIsValid(rawBody: string, header: string | null): Promise
 // descartado na entrada — o bruto que a plataforma guarda é o que a função SQL
 // recebe como `p_payload`, e ELE é montado aqui, não copiado às cegas.
 
+// A resposta de botão (RF-033a). É transporte, não regra: a ingestão carrega o
+// `id` que NÓS emitimos e nada mais — quem o reconhece é
+// `agents_runtime.dispatch.consent`, determinístico, no turno de entrada. Sem
+// estas quatro linhas o toque na Bloquear chegaria como uma mensagem de tipo
+// `interactive` sem texto, e o consentimento do contato sumiria na entrada.
+const ButtonReply = z.object({
+  id: z.string().min(1),
+  title: z.string().optional(),
+});
+
 const InboundMessage = z.object({
   id: z.string().min(1), // wamid — a chave natural do evento
   from: z.string().regex(/^\d{8,15}$/), // dígitos, sem '+': a Meta manda assim
   timestamp: z.string().optional(),
   type: z.string(),
   text: z.object({ body: z.string() }).optional(),
+  interactive: z
+    .object({
+      type: z.string(),
+      button_reply: ButtonReply.optional(),
+    })
+    .optional(),
 });
 
 const StatusUpdate = z.object({
@@ -126,7 +142,14 @@ async function ingestMessage(phoneNumberId: string, message: z.infer<typeof Inbo
       'message_inbound',
       ${sql.json({
         from: `+${message.from}`,
-        message: { type: message.type, text: message.text?.body ?? null },
+        message: {
+          type: message.type,
+          text: message.text?.body ?? null,
+          // Sobe ao mesmo nível de `text` de propósito: quem lê a linha em
+          // `public.messages.content` procura o toque num lugar só, sem
+          // conhecer o formato da Meta.
+          button_reply: message.interactive?.button_reply ?? null,
+        },
       })}
     )
   `;

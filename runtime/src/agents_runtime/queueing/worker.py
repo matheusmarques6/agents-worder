@@ -5,6 +5,16 @@ set inside them. Phase 2 — the responder — runs outside any transaction, whi
 is the whole point of the lease: an LLM call must never hold a connection's
 transaction open.
 
+**Between phase 1 and phase 2 there is one step that is not about answering**:
+the consent buttons of RF-033(a). It lives here, ahead of the model and outside
+it, because a decision about whether we may message somebody again is the last
+thing in this product that may depend on a language model. The message that
+carries a button reply is written by the same stranger every other message is
+written by (`CLAUDE.md`, trust boundaries) — but the button ID inside it is one
+WE issued and WE listed, so recognising it is a lookup in a table of two
+entries, not an interpretation. The model still sees the message and still
+answers it; it simply is not consulted about the consent.
+
 While phase 2 lasts, a keepalive renews both leases the turn holds: the
 conversation lease (so no second worker assumes a turn that is merely slow)
 and the queue message's visibility (so pgmq never redelivers it). The two
@@ -21,7 +31,9 @@ import psycopg
 
 from agents_runtime.clock import Clock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.dispatch import consent
 from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.repository import consent as consent_repo
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
 
@@ -67,6 +79,47 @@ async def _keepalive(
         await clock.sleep(config.heartbeat_every.total_seconds())
 
 
+async def _apply_consent(
+    conn: psycopg.AsyncConnection, job: InboundJob, *, after_seq: int
+) -> None:
+    """Whatever the contact TAPPED in this window, applied, in order.
+
+    The last recognised tap wins, which is the only reading that survives a
+    contact tapping twice inside one debounce: what a person meant is what they
+    did last. An unrecognised message — every ordinary message — costs one
+    already-open read and nothing else.
+    """
+    async with conn.transaction():
+        await engine.scope_to_tenant(conn, job.tenant_id)
+        contents = await consent_repo.load_inbound_contents(
+            conn,
+            conversation_id=job.conversation_id,
+            after_seq=after_seq,
+            target_seq=job.target_seq,
+        )
+
+        decisions = [consent.recognize(content) for content in contents]
+        tapped = next((decision for decision in reversed(decisions) if decision), None)
+        if tapped is None:
+            return
+
+        contact_id = await consent_repo.contact_of_conversation(conn, job.conversation_id)
+        if contact_id is None:
+            # The conversation the job names is not this tenant's. The turn
+            # itself will fail on the same fact; nothing is written on a guess.
+            return
+
+        if tapped == consent.BLOCK:
+            await consent_repo.suppress_contact(
+                conn,
+                contact_id,
+                reason=consent.EXPLICIT_BLOCK,
+                created_by=consent.CREATED_BY_SYSTEM,
+            )
+        else:
+            await consent_repo.authorize_contact(conn, contact_id)
+
+
 async def run_turn(
     conn: psycopg.AsyncConnection,
     job: InboundJob,
@@ -96,6 +149,12 @@ async def run_turn(
             await engine.scope_to_tenant(conn, job.tenant_id)
             await engine.release_lease(conn, job.conversation_id, token)
         return TurnResult.STALE
+
+    # RF-033(a) — the consent buttons, recognised deterministically, BEFORE the
+    # model and independently of whether the model ever runs. Its own short
+    # transaction: what it may write is a record of somebody's opposition, and
+    # that record must not share a fate with a draft the CAS can refuse.
+    await _apply_consent(conn, job, after_seq=claimed.last_processed_seq)
 
     # FASE 2 — work, outside any transaction, with the keepalive breathing.
     beat = asyncio.create_task(
