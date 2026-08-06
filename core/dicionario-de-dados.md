@@ -235,7 +235,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | phone_e164 | text NOT NULL | |
 | name | text | |
 | language | text | idioma detectado do contato (agente se adapta) |
-| opt_status | text CHECK | `pending \| authorized \| blocked` — botões Autorizar/Bloquear |
+| opt_status | text CHECK | `pending \| authorized \| blocked` — **projeção de `suppression_list` (§4.4), que é a autoridade**. `blocked` é derivado por trigger e nunca escrito à mão; `pending`/`authorized` são o consentimento expresso pelos botões Autorizar/Bloquear, que só esta coluna guarda. Remover a supressão devolve o contato a `pending`, nunca a `authorized` |
 | customer_id | uuid FK → customers nullable | vínculo quando identificado |
 | first_seen_at / last_message_at | timestamptz | |
 | created_at | timestamptz | |
@@ -280,6 +280,11 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | created_at | timestamptz | |
 
 ### 4.4 `suppression_list`
+
+**É a autoridade sobre "podemos mandar mensagem para este contato?".** `contacts.opt_status` (§4.1) é projeção desta tabela, mantida por trigger — não por cada escritor. Duas colunas respondendo o mesmo fato divergem no pior dia, e um dever que cada escritor precisa lembrar é um dever que o quarto escritor esquece (achado do S2, fechado no S6). Uma linha por contato: supressão é estado, não log — uma segunda razão para o mesmo contato faria "este contato está bloqueado?" ter duas respostas.
+
+Três escritores, um por via do RF-033, e todos passando por `internal.suppress_contact` / `internal.suppress_silent_contacts`: (a) o botão **Bloquear** de um disparo a contato novo → `explicit_block`, `created_by = system`; (b) a varredura do silêncio depois de três **funis distintos** desde a última mensagem do contato → `no_response_after_3`, `created_by = system`; (c) a tool `record_optout`, que o modelo escolhe depois de detectar a intenção → `intent_optout`, `created_by = agent`. O `created_by` separa o que obedecemos do que um modelo interpretou, porque só um dos dois pode estar errado sobre o que o contato quis dizer.
+
 | Atributo | Tipo | Regras / descrição |
 |---|---|---|
 | id | uuid PK | |
@@ -288,6 +293,8 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | reason | text CHECK | `explicit_block \| no_response_after_3 \| intent_optout \| manual` |
 | created_by | text CHECK | `system \| agent \| admin` |
 | created_at | timestamptz | checada antes de TODO envio proativo; opt-out ≠ apagamento |
+
+Toda inserção grava também `audit_log` (`suppression.<reason>`, alvo `contact`) — RNF-044 pede oposição registrada com motivo e timestamp, e a supressão que ninguém pediu (via b) é justamente a que mais precisa poder ser explicada depois.
 
 ---
 
