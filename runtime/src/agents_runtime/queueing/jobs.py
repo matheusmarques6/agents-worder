@@ -60,6 +60,43 @@ class DomainEventJob:
 
 
 @dataclass(frozen=True, slots=True)
+class ScheduledTouchJob:
+    """What the dispatcher's minute tick enqueued: this touch is due.
+
+    Ids only, and the tenant among them for the reason `InboundJob` carries it:
+    without `SET LOCAL app.tenant_id` the worker cannot read its own touch, and
+    the claim already knew whose it was. Every fact the ladder weighs is loaded
+    when the job is picked up — a snapshot inside a payload would be as old as
+    the queue wait, which is exactly the staleness the ladder exists to catch.
+    """
+
+    scheduled_touch_id: UUID
+    tenant_id: UUID
+    otel: dict[str, Any] | None = None
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "ScheduledTouchJob":
+        try:
+            return cls(
+                scheduled_touch_id=UUID(payload["scheduled_touch_id"]),
+                tenant_id=UUID(payload["tenant_id"]),
+                otel=payload.get("otel"),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"malformed scheduled touch job: {payload!r}") from error
+
+    def to_payload(self) -> dict[str, Any]:
+        """The shape the claim task sends. Written here, next to the parser, so
+        the producer and the consumer of this queue cannot disagree — the
+        coalescer's payload is built in SQL and this one is not, which would
+        otherwise leave the two halves in different files."""
+        return {
+            "scheduled_touch_id": str(self.scheduled_touch_id),
+            "tenant_id": str(self.tenant_id),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class EvalJob:
     """What `conclude_turn` enqueued: audit the reply that was actually sent.
 
