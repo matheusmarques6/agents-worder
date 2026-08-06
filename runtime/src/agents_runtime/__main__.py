@@ -25,6 +25,15 @@ DSN_VARIABLE = "SUPABASE_DB_URL"
 #: The responder factory. Required, unlike the channel — see below.
 RESPONDER_VARIABLE = "AGENTS_RESPONDER"
 
+#: The post-hoc reviewer factory (S9b). Optional, and on the CHANNEL's side of
+#: the asymmetry rather than the responder's: without it `q_evals` is not
+#: polled at all, so the evaluations pile up in the queue where a depth alert
+#: finds them. Nothing reaches a customer unjudged either way — Judge 1
+#: pre-send is inside the responder and does not depend on this seam. The
+#: compose file of E0-19 sets it; a deployment without it audits nothing, which
+#: is a measurement failure and must be caught by the production smoke.
+REVIEWER_VARIABLE = "AGENTS_REVIEWER"
+
 
 def _factory_from_env(variable: str, dsn: str, *, required: bool = False):
     """module:callable, called with the DSN. Broken specs die at startup —
@@ -77,6 +86,7 @@ async def _serve(dsn: str) -> None:
         # The responder seam, reachable from outside the process: cenário 4
         # holds a REAL subprocess inside FASE 2 through this.
         respond=_factory_from_env(RESPONDER_VARIABLE, dsn, required=True),
+        review=_factory_from_env(REVIEWER_VARIABLE, dsn),
         process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
         worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
