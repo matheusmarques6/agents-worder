@@ -25,7 +25,7 @@ Convenção: RF-xxx = funcional · RNF-xxx = não-funcional. Tudo aqui é rastre
 - **RF-012** Respostas saem com delay humanizado e indicador "digitando".
 - **RF-013** O agente tem idioma principal definido pelo tenant, mas se adapta ao idioma do contato.
 - **RF-014** "Nunca dizer que é IA" é configuração por tenant.
-- **RF-015** Toda resposta passa pelo Judge 1 pré-envio; reprovação regenera a resposta. Violação crítica detectada após o envio dispara auto-correção na própria conversa + alerta in-app ao admin.
+- **RF-015** Toda resposta **reativa** passa pelo Judge 1 pré-envio; reprovação regenera a resposta. Violação crítica detectada após o envio dispara auto-correção na própria conversa + alerta in-app ao admin. **Disparo e campanha não passam pelo Judge 1** (decisão do Bruno, 2026-08-06): a variação anti-ban de copy responde a um **validador determinístico** que só permite variar o `copy_base` aprovado, sem introduzir número, prazo, link ou promessa que a base não tenha; violação → o toque não sai e abre linha em `alerts`. O item da outbox grava `payload.generated`. O risco residual — forma conferida, intenção não — está registrado em `arquitetura §5.5`.
 - **RF-016** Takeover humano: um atendente assume a conversa e o agente pausa nela; enquanto pausado, observa em silêncio (registra mensagens e atualiza slots); o retorno é somente manual ("devolver para IA"), retomando com contexto.
 - **RF-017** O tenant escolhe as tools do agente dentro de um leque: consultar pedido, consultar produtos, rastreio, salvar contato, chamar humano, agendar.
 - **RF-018** Follow-up proativo dentro da conversa é opcional e configurável por tenant.
