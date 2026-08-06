@@ -67,8 +67,10 @@ CORRECTED = "corrected"
 CORRECTION_BLOCKED = "correction_blocked"
 #: A conta do canal sumiu: não dá para corrigir, e fingir que deu seria pior.
 NO_CHANNEL = "no_channel"
-#: O payload do job não tem a forma do contrato. Não melhora numa segunda leitura.
-INVALID_PAYLOAD = "invalid_payload"
+# O sétimo desfecho do checklist — `invalid_payload` — não tem constante aqui de
+# propósito: o handler arquiva o payload malformado e ninguém lê um nome para
+# ele. Nome sem leitor é decoração, e decoração apodrece. Ele volta com a linha
+# de log estruturado do S10, que é o leitor que ainda não existe.
 
 #: `internal.correction_outcome`, do lado de cá.
 _SENT, _ALREADY_SENT = "sent", "already_sent"
