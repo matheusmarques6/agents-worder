@@ -248,10 +248,12 @@ Todas com `tenant_id` + RLS (JWT, `worker_role` e `sender_role`), salvo indicaç
 
 ### 5.2 Evento de abandono (carrinho/checkout/PIX)
 1. Webhook → `ingest_webhook()` → `q_domain_events`.
-2. Worker: supressão → quota → staleness (§5.3) → pago nesse meio-tempo? aborta (evento de pagamento também cancela funil ativo — por isso `q_domain_events` tem promoção por idade).
-3. `dispatch` cria/continua funil: primeiro toque via outbox, próximos em `scheduled_touches`.
-4. Cloud API → template aprovado + botões Autorizar/Bloquear em contato novo. Evolution → anti-ban (§5.5).
-5. Resposta do contato mata toques futuros e vira conversa normal (5.1).
+2. Worker (`internal.apply_domain_event`): reentrega já aplicada? tipo suportado? telefone E.164? canal ativo? A ocasião tem **funil habilitado** para o tenant? Não → desfecho `no_funnel`, sem nada gravado. Desfechos são dado, não exceção; só um job apontando para evento inexistente levanta.
+3. `internal.start_funnel_run` materializa a **cadência inteira** do funil em `scheduled_touches`, numa transação única — contato, conversa (reusada se aberta) e uma linha por toque de `funnels.touches`, com `due_at = event_at + delay` e `event_at` = o instante do **evento**, nunca o do agendamento.
+4. **Nenhum toque vai direto para a outbox** (E3 · D11). O toque nº 1 nasce vencido (`delay = PT0S` ⇒ `due_at` no passado) e o dispatcher o pega no tique seguinte; um evento atrasado materializa uma cadência já vencida, e é a escada que decide se ela ainda sai. O primeiro toque atravessa exatamente as mesmas proteções que o quarto: **existe uma porta de saída só**. A versão anterior deste fluxo mandava o primeiro toque via outbox e só os seguintes para `scheduled_touches` — o que fazia o primeiro toque de todo funil pular a escada, contra o RF-033 (supressão checada antes de TODO envio proativo) e o RF-034 (a janela de 24h soma TODAS as origens).
+5. Dispatcher (§5.4): supressão → quota → staleness (§5.3) → limites, com os guards revalidados no `WHERE` da gravação. Pago nesse meio-tempo? nada sai, toque cancelado com motivo (evento de pagamento também cancela funil ativo — por isso `q_domain_events` tem promoção por idade).
+6. Cloud API → template aprovado + botões Autorizar/Bloquear em contato novo. Evolution → anti-ban (§5.5).
+7. Resposta do contato mata toques futuros e vira conversa normal (5.1).
 
 ### 5.3 Drenagem pós-queda (staleness check)
 Evento com idade > 5 min: mensagem mais recente depois do evento? Pedido pago? Contato em supressão? → archive com log.

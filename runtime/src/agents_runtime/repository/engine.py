@@ -113,14 +113,19 @@ async def conclude_turn(
     return TurnOutcome(committed=committed, outbound_seq=outbound_seq, outbox_id=outbox_id)
 
 
-# --- the domain event touch ----------------------------------------------------
+# --- the domain event: an abandonment becomes a funnel cadence ------------------
 
 
 @dataclass(frozen=True, slots=True)
 class DomainEventOutcome:
     """Outcomes are data (`applied`, `already_applied`, `discarded`,
-    `invalid_payload`, `no_channel`) — the handler archives on all of them.
-    A missing event raises instead: that is a bug, and bugs take the ladder."""
+    `invalid_payload`, `no_channel`, `no_funnel`) — the handler archives on all
+    of them. A missing event raises instead: that is a bug, and bugs take the
+    ladder.
+
+    Since E3 S3, `applied` means "the funnel's cadence exists in
+    `scheduled_touches`" and `outbox_id` is always None: no proactive touch
+    reaches the outbox except through the dispatcher's ladder (D11)."""
 
     status: str
     conversation_id: UUID | None
@@ -128,11 +133,10 @@ class DomainEventOutcome:
 
 
 async def apply_domain_event(
-    conn: psycopg.AsyncConnection, webhook_event_id: int, *, touch_text: str
+    conn: psycopg.AsyncConnection, webhook_event_id: int
 ) -> DomainEventOutcome:
     cursor = await conn.execute(
-        "select * from internal.apply_domain_event(%s, %s)",
-        (webhook_event_id, touch_text),
+        "select * from internal.apply_domain_event(%s)", (webhook_event_id,)
     )
     status, conversation_id, outbox_id = await cursor.fetchone()
     return DomainEventOutcome(status=status, conversation_id=conversation_id, outbox_id=outbox_id)
