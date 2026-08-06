@@ -103,7 +103,13 @@ async def run_touch(
         await _cancel(conn, job, decision.reason)
         return Ack.ARCHIVE
 
-    payload = copy.render(snapshot.cadence, snapshot.touch_number)
+    # RF-033(a): a touch to a contact who has not consented carries the
+    # Autorizar/Bloquear pair. The status is read in FASE 1 with everything
+    # else — asking the database again here would be a fact from a different
+    # instant riding in the same payload.
+    payload = copy.render(
+        snapshot.cadence, snapshot.touch_number, opt_status=snapshot.opt_status
+    )
 
     # FASE 3 — the compare-and-set. Everything the decision stood on, revalidated
     # inside the same short transaction as the insert.
