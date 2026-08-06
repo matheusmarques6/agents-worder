@@ -29,6 +29,10 @@ Defaults importantes:
   inerte para o runtime**: o processo recusa subir sem responder (PR #50),
   porque cair na resposta constante do E1 seria responder a um cliente sem
   passar pelo Judge 1.
+- `AGENTS_REVIEWER` ja vem apontando para a auditoria pos-envio (S9b) e e
+  **obrigatoria como o responder**: sem ela a fila `q_evals` nao e consumida, o
+  "100% avaliado" da janela de shadow vira promessa que ninguem cumpre e
+  nenhuma violacao critica e reparada. O processo recusa subir sem ela.
 - `AGENTS_CHANNEL` vazio preserva o sender desligado, como o codigo ja faz hoje.
 
 O agente real le a chave do OpenRouter na largada e tambem morre sem ela, entao

@@ -57,3 +57,33 @@ class DomainEventJob:
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"malformed domain event job: {payload!r}") from error
+
+
+@dataclass(frozen=True, slots=True)
+class EvalJob:
+    """What `conclude_turn` enqueued: audit the reply that was actually sent.
+
+    Created in the same transaction as the outbox row (decisão 91), so the job
+    exists exactly when the message exists — never for a draft the CAS refused.
+
+    Ids only, the rule `apply_domain_event` already follows (decisão 74): the
+    text, the score of the pre-send judge and everything else live on rows, and
+    a copy inside a payload is a copy that can drift from what was said.
+    """
+
+    tenant_id: UUID
+    conversation_id: UUID
+    message_id: UUID
+    otel: dict[str, Any] | None = None
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "EvalJob":
+        try:
+            return cls(
+                tenant_id=UUID(payload["tenant_id"]),
+                conversation_id=UUID(payload["conversation_id"]),
+                message_id=UUID(payload["message_id"]),
+                otel=payload.get("otel"),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"malformed evaluation job: {payload!r}") from error

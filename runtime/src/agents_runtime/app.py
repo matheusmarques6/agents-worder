@@ -22,12 +22,13 @@ from collections.abc import Mapping
 import psycopg
 
 from agents_runtime.agent_core.responder import FIXED_TOUCH, Responder, fixed_responder
+from agents_runtime.agent_core.review import Reviewer
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import DOMAIN_EVENTS, INBOUND
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
-from agents_runtime.queueing.jobs import DomainEventJob, InboundJob
+from agents_runtime.queueing.jobs import DomainEventJob, EvalJob, InboundJob
 from agents_runtime.queueing.sender import sender_pass
 from agents_runtime.queueing.tenant_slots import TenantSlots
 from agents_runtime.queueing.worker import TurnResult, run_turn
@@ -36,6 +37,43 @@ from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
 
 APPLICATION_NAME = "agents-runtime"
+
+
+def evals_handler_for(review: Reviewer, slots: TenantSlots) -> Handler:
+    """The `q_evals` consumer, in the mould of the domain event handler.
+
+    Module level rather than a closure inside `run`, so the wiring can be
+    reached by a test through the same door production uses (the S4/89 lesson:
+    a test that rebuilds the wiring proves the rebuild).
+
+    Two differences from the domain handler, both deliberate:
+
+      * **it takes a tenant slot.** That handler is one short SQL call; this one
+        calls a model, which is what the cap of ADR-2 exists to bound. A full
+        tenant postpones the job — set_vt, never a drop;
+      * **a payload it cannot parse is archived**, not retried. A shape does not
+        become valid on a second read, and there is no tenant in it to charge
+        the wait to. The job's own trail is the message it points at.
+
+    Everything else archives because outcomes are DATA (decisão 74). Only an
+    exception — a bug, the database down — climbs to the loop's retry ladder.
+    """
+
+    async def handle(queue_name: str, message) -> Ack:
+        try:
+            job = EvalJob.from_payload(message.payload)
+        except ValueError:
+            return Ack.ARCHIVE
+
+        if not slots.try_acquire(job.tenant_id):
+            return Ack.RETRY_SHORT
+        try:
+            await review(job)
+        finally:
+            slots.release(job.tenant_id)
+        return Ack.ARCHIVE
+
+    return handle
 
 
 async def _connect(dsn: str, set_role: str | None) -> psycopg.AsyncConnection:
@@ -66,6 +104,7 @@ async def run(
     clock: Clock | None = None,
     randomness: Randomness | None = None,
     respond: Responder | None = None,
+    review: Reviewer | None = None,
     channel: ChannelPort | None = None,
     extra_handlers: Mapping[str, Handler] | None = None,
     process_name: str = APPLICATION_NAME,
@@ -149,11 +188,20 @@ async def run(
             connections.append(conn)
 
             queue_names = {INBOUND, DOMAIN_EVENTS, *(extra_handlers or {})}
+            if review is not None:
+                # Absent means the queue is not even polled: the evaluations
+                # pile up visibly instead of being read and thrown away. Same
+                # rule as the channel, and the opposite of the responder —
+                # missing auditing costs measurement, missing judging would
+                # cost a customer an unjudged reply (decisão 89).
+                queue_names.add(EVALS)
             queues = {name: PgmqQueue(conn, name) for name in queue_names}
             handlers: dict[str, Handler] = {
                 INBOUND: await inbound_handler_for(conn, queues),
                 DOMAIN_EVENTS: domain_handler_for(conn),
             }
+            if review is not None:
+                handlers[EVALS] = evals_handler_for(review, slots)
             if extra_handlers:
                 handlers.update(extra_handlers)
 

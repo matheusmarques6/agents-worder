@@ -11,6 +11,10 @@ services:
       # Required — the process refuses to start without it, so the default is
       # the real responder rather than an empty value that only fails later.
       AGENTS_RESPONDER: "${AGENTS_RESPONDER:-agents_runtime.agent_core.responder:agent_responder}"
+      # Required too (RF-008): without it `q_evals` is never polled and the
+      # shadow window's "100% avaliado" would be a promise nobody keeps. It uses
+      # the same OpenRouter key as the responder.
+      AGENTS_REVIEWER: "${AGENTS_REVIEWER:-agents_runtime.agent_core.review:agent_reviewer}"
       AGENTS_OPENROUTER_API_KEY: ${AGENTS_OPENROUTER_API_KEY:-}
       AGENTS_CHANNEL: ${AGENTS_CHANNEL:-}
       AGENTS_META_ACCESS_TOKEN: ${AGENTS_META_ACCESS_TOKEN:-}
