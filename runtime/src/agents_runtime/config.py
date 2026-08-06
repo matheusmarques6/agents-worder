@@ -50,6 +50,14 @@ class QueueingConfig:
     # consulta cross-tenant sem mudar o que o contato vê.
     dispatcher_tick: timedelta = timedelta(minutes=1)
 
+    # A varredura do silêncio (RF-033b): três funis ignorados viram uma linha em
+    # `suppression_list`. Quinze minutos porque nada nela é sensível a latência
+    # — entre dois funis distintos existe o cooldown de 72h, então o contato não
+    # receberia nada nesse intervalo de qualquer forma, e a escada continua
+    # protegendo enquanto a linha não existe. O que a varredura acrescenta é o
+    # FATO gravado, não a proteção.
+    silence_sweep_tick: timedelta = timedelta(minutes=15)
+
     # A escada da arquitetura: 30s, 2min, 8min… O teto não morde nos limites
     # atuais (cinco tentativas param em ~34 min); existe para o dia em que um
     # limite subir sem ninguém reler esta conta.
@@ -111,6 +119,7 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
         conversation_lease=_ms("AGENTS_LEASE_MS", base.conversation_lease),
         coalescer_tick=_ms("AGENTS_COALESCER_TICK_MS", base.coalescer_tick),
         dispatcher_tick=_ms("AGENTS_DISPATCHER_TICK_MS", base.dispatcher_tick),
+        silence_sweep_tick=_ms("AGENTS_SILENCE_TICK_MS", base.silence_sweep_tick),
         busy_retry=_ms("AGENTS_BUSY_RETRY_MS", base.busy_retry),
         idle_pause=_ms("AGENTS_IDLE_PAUSE_MS", base.idle_pause),
         sender_poll=_ms("AGENTS_SENDER_POLL_MS", base.sender_poll),

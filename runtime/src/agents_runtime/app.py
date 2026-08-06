@@ -31,6 +31,7 @@ from agents_runtime.queueing.dispatcher import dispatch_pass, run_touch
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
 from agents_runtime.queueing.jobs import DomainEventJob, EvalJob, InboundJob, ScheduledTouchJob
 from agents_runtime.queueing.sender import sender_pass
+from agents_runtime.queueing.suppression import silence_pass
 from agents_runtime.queueing.tenant_slots import TenantSlots
 from agents_runtime.queueing.worker import TurnResult, run_turn
 from agents_runtime.randomness import Randomness, SystemRandomness
@@ -227,6 +228,24 @@ async def run(
                 await _sleep_or_stop(clock, stop, config.dispatcher_tick.total_seconds())
 
         tasks.append(asyncio.create_task(dispatcher(), name="dispatcher"))
+
+        # -- the silence sweep (RF-033b): three funnels ignored become a row in
+        # `suppression_list`. Its own connection for the same reason the
+        # dispatcher has one — it opens a transaction, and two tasks opening
+        # transactions on one connection is one transaction with two owners.
+        #
+        # Sweeping before its first sleep, like the dispatcher: a periodic task
+        # that sleeps first never runs on a process that restarts faster than
+        # its own tick, and this one's tick is the longest in the composition.
+        silence_conn = await _connect(dsn, worker_set_role)
+        connections.append(silence_conn)
+
+        async def silence() -> None:
+            while not stop.is_set():
+                await silence_pass(silence_conn)
+                await _sleep_or_stop(clock, stop, config.silence_sweep_tick.total_seconds())
+
+        tasks.append(asyncio.create_task(silence(), name="silence-sweep"))
 
         # -- workers: one connection and one loop each, so a slow turn on one
         # never blocks a claim on another (and cenários B get real concurrency).
