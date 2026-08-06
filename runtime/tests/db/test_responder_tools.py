@@ -229,6 +229,58 @@ class TestWhatTheModelIsOffered:
 
         assert {spec.name for spec in llm.asked[0].tools} == {"record_optout"}
 
+    async def test_the_order_tools_a_tenant_enabled_reach_the_model(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """The catalogue widened in this step, and this is what it buys: a
+        merchant who enabled the order tools has an agent that can actually be
+        asked about an order. Enabled, not compulsory — unlike `record_optout`,
+        whose right belongs to the contact, looking up a pedido protects nobody
+        from the merchant."""
+        enable(admin, tenant, tools=("get_order", "get_tracking", "escalate_to_human"))
+        thread = a_thread_that_asked(admin, tenant)
+        llm = ToolCallingLlm(["Deixa eu olhar 🧡"])
+
+        await build_responder(dsn, llm=llm, set_role="worker_role")(
+            a_job(tenant, thread.conversation_id)
+        )
+
+        assert {spec.name for spec in llm.asked[0].tools} == {
+            "get_order",
+            "get_tracking",
+            "escalate_to_human",
+            "record_optout",
+        }
+
+    async def test_a_tenant_that_did_not_enable_the_order_tools_cannot_be_talked_into_them(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """The negative that keeps the widening honest. A tool absent from the
+        registry is absent from the offer AND from the lookup — however
+        convincing the contact's message was, and however confidently the model
+        names it."""
+        enable(admin, tenant, tools=())
+        thread = a_thread_that_asked(admin, tenant, text="me vê o pedido 1001")
+        llm = ToolCallingLlm(
+            [Demand(("get_order", '{"order_id": "1001"}')), "Não consigo ver isso por aqui."]
+        )
+
+        await build_responder(dsn, llm=llm, set_role="worker_role")(
+            a_job(tenant, thread.conversation_id)
+        )
+
+        assert "get_order" not in {spec.name for spec in llm.asked[0].tools}
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                select count(*) from internal.tool_calls
+                 where conversation_id = %s and tool_name = 'get_order'
+                """,
+                (thread.conversation_id,),
+            )
+            (ran,) = cur.fetchone()
+        assert ran == 0
+
     async def test_a_tool_the_model_chose_runs_and_leaves_a_row(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
