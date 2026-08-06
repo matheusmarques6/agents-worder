@@ -8,7 +8,9 @@ services:
       AGENTS_PROCESS_NAME: ${AGENTS_PROCESS_NAME:-agents-runtime-docker}
       AGENTS_WORKER_SET_ROLE: ${AGENTS_WORKER_SET_ROLE:-worker_role}
       AGENTS_SENDER_SET_ROLE: ${AGENTS_SENDER_SET_ROLE:-sender_role}
-      AGENTS_RESPONDER: ${AGENTS_RESPONDER:-}
+      # Required — the process refuses to start without it, so the default is
+      # the real responder rather than an empty value that only fails later.
+      AGENTS_RESPONDER: "${AGENTS_RESPONDER:-agents_runtime.agent_core.responder:agent_responder}"
       AGENTS_OPENROUTER_API_KEY: ${AGENTS_OPENROUTER_API_KEY:-}
       AGENTS_CHANNEL: ${AGENTS_CHANNEL:-}
       AGENTS_META_ACCESS_TOKEN: ${AGENTS_META_ACCESS_TOKEN:-}

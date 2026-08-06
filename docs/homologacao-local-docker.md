@@ -25,15 +25,23 @@ Defaults importantes:
   `host.docker.internal:54322`.
 - `NEXT_PUBLIC_SUPABASE_URL` aponta para a API local do Supabase CLI em
   `host.docker.internal:54321`.
-- `AGENTS_RESPONDER` vazio preserva o responder fixo atual do runtime.
+- `AGENTS_RESPONDER` ja vem apontando para o agente real. **Nao existe modo
+  inerte para o runtime**: o processo recusa subir sem responder (PR #50),
+  porque cair na resposta constante do E1 seria responder a um cliente sem
+  passar pelo Judge 1.
 - `AGENTS_CHANNEL` vazio preserva o sender desligado, como o codigo ja faz hoje.
 
-Se quiser subir o agente real no `runtime`, defina:
+O agente real le a chave do OpenRouter na largada e tambem morre sem ela, entao
+o `runtime` so sobe com as duas coisas:
 
 ```env
 AGENTS_RESPONDER=agents_runtime.agent_core.responder:agent_responder
 AGENTS_OPENROUTER_API_KEY=...
 ```
+
+Se o container ficar reiniciando em laco, e configuracao faltando, nao defeito:
+`docker compose logs runtime` mostra qual das duas. Para subir so o hub enquanto
+isso nao estiver resolvido, use `docker compose up hub`.
 
 Se quiser ligar o sender da Cloud API, defina tambem:
 
