@@ -26,6 +26,8 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | never_say_ai | boolean DEFAULT true | config por tenant |
 | followup_enabled | boolean DEFAULT false | follow-up proativo opcional |
 | primary_language | text DEFAULT 'pt-BR' | idioma principal do agente |
+| proactive_max_per_contact_24h | smallint NOT NULL DEFAULT 1 | **CHECK entre 1 e 4** — teto de toques proativos por contato/24h somando todas as origens (RF-034). O 4 é o teto absoluto da plataforma e é constraint, não convenção (nota 7). Escrita só por `internal.set_proactive_cap()`; nenhum role tem `UPDATE` em `tenants` e um trigger recusa alteração que não venha da função |
+| attribution_window_hours | smallint NOT NULL DEFAULT 24 | janela em que um pedido pago depois de um toque conta como receita recuperada (D8 do E3) |
 | shadow_until | timestamptz | fim dos 7 dias de estreia (100% avaliado) |
 | cancelled_at | timestamptz | inicia a contagem dos 10 dias para hard delete |
 | created_at / updated_at | timestamptz | |
@@ -59,6 +61,8 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | target_type / target_id | text / uuid | entidade afetada |
 | payload | jsonb | detalhes (diff, aceite de risco, motivo) |
 | created_at | timestamptz | index (tenant_id, created_at) |
+
+> **Append-only é privilégio, não promessa** (materializada no E3 · S2): nenhum role recebe `UPDATE` ou `DELETE` nesta tabela — uma entrada pode ser lida, nunca editada para longe. `tenant_id` nulo = ação de plataforma, invisível a todo tenant porque as políticas comparam por igualdade e `tenant_id = null` nunca é verdadeiro (mesma forma de `alerts`).
 
 ---
 
@@ -177,8 +181,9 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | external_id | text NOT NULL | id do pedido na plataforma |
 | customer_external_id | text | liga ao `customers.external_id` |
 | status | text | fulfillment/status geral |
-| financial_status | text | `pending \| paid \| refunded...` — pago cancela funil |
-| total | numeric(12,2) / currency text | |
+| financial_status | text NOT NULL DEFAULT 'pending' CHECK | `pending \| authorized \| paid \| partially_refunded \| refunded \| voided \| cancelled` — pago cancela funil (nota 3). O vocabulário é **normalizado pelo adaptador do conector**, nunca a palavra crua da plataforma: um valor não mapeado não falharia, apenas nunca seria igual a `paid`, e o lojista seguiria cobrando quem já pagou. O CHECK é o que torna o esquecimento barulhento |
+| currency | text NOT NULL DEFAULT 'BRL' | ISO-4217 (CHECK `^[A-Z]{3}$`) |
+| total | numeric(12,2) | |
 | items | jsonb | linhas do pedido |
 | tracking_code | text | usado pela tool de rastreio |
 | tracking_status | text | último status conhecido |
@@ -342,8 +347,8 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | enabled | boolean DEFAULT true | |
 | channel_preference | text CHECK | `cloud \| evolution \| auto` |
 | touches | jsonb NOT NULL | `[{n, delay, template_ref/copy_base, cta}]` — copy é variada por LLM no envio Evolution |
-| max_touches | integer DEFAULT 4 | teto do RF-034 |
-| created_at / updated_at | timestamptz | |
+| max_touches | integer DEFAULT 4 | teto da cadência **deste funil**, não limite por contato — os limites por contato são da escada (RF-034) e vivem em `tenants.proactive_max_per_contact_24h` |
+| created_at / updated_at | timestamptz | **índice único parcial (tenant_id, occasion) WHERE enabled** (nota 8): `start_funnel_run` pergunta "esta ocasião tem funil habilitado?" e duas respostas não são configuração, são sorteio |
 
 ### 5.5 `scheduled_touches`
 | Atributo | Tipo | Regras / descrição |
@@ -352,12 +357,32 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | tenant_id | uuid FK | |
 | funnel_id | uuid FK | |
 | contact_id | uuid FK | |
-| conversation_id | uuid FK nullable | |
+| conversation_id | uuid FK nullable | ON DELETE SET NULL — o toque pode preceder a conversa que vai iniciar, e precisa sobreviver a uma conversa purgada, senão o cooldown de 72h esquece toques que saíram |
+| order_id | uuid FK → orders nullable | o pedido que este funil persegue; sem ele o guard `order_unpaid` da escada não tem o que revalidar (E3 · D2) |
 | touch_number | integer | |
+| event_at | timestamptz NOT NULL | quando aconteceu o fato que justifica o toque (o abandono, o PIX não pago) — **não** quando o toque foi agendado, e sem DEFAULT de propósito: `now()` trocaria silenciosamente um pelo outro e quebraria exatamente o caso de evento atrasado que o staleness existe para pegar (RF-032) |
 | due_at | timestamptz NOT NULL | index (status, due_at) |
 | status | text CHECK | `pending \| enqueued \| sent \| cancelled` |
-| cancel_reason | text nullable | `replied \| paid \| suppressed \| manual` |
+| cancel_reason | text nullable | **o vocabulário é o da escada** (`agents_runtime.dispatch.ladder.DENIAL_REASONS`): `suppressed_block \| suppressed_silence \| suppressed_optout \| quota_exceeded \| stale_newer_message \| stale_order_paid \| rate_limit_24h \| funnel_cooldown_72h \| channel_paused_tier`, mais `manual` (cancelamento por operador, que a escada não produz). Os quatro valores antigos (`replied \| paid \| suppressed \| manual`) não cabiam os nove motivos, e achatá-los apagaria a métrica "toques cancelados **por motivo**" — que é a que diagnostica um funil |
+| sent_at | timestamptz nullable | instante em que o toque foi **comprometido na outbox** (a entrega acontece depois, no sender). É o que a janela de 72h entre funis distintos mede |
+| outbox_id | uuid FK → message_outbox nullable | ON DELETE SET NULL — drenar a outbox não pode apagar o fato de que um contato foi tocado |
+| created_at | timestamptz | CHECKs de estado inteiro: `(status='sent') = (sent_at IS NOT NULL)` e `(status='cancelled') = (cancel_reason IS NOT NULL)` (nota 9) |
+
+### 5.6 `funnel_conversions` — receita recuperada como fato gravado (E3 · D8)
+| Atributo | Tipo | Regras / descrição |
+|---|---|---|
+| id | uuid PK | |
+| tenant_id | uuid FK | index (tenant_id, attributed_at desc) |
+| funnel_id | uuid FK nullable | ON DELETE SET NULL |
+| contact_id | uuid FK nullable | ON DELETE SET NULL — a purga por contato corta a pessoa e deixa o dinheiro, que é o que a LGPD pede |
+| scheduled_touch_id | uuid FK nullable | ON DELETE SET NULL — qual toque levou à conversão |
+| order_id | uuid FK nullable | **UNIQUE** — um pagamento credita um funil só; duas linhas dobrariam o único número pelo qual o lojista compra o produto |
+| amount | numeric(12,2) NOT NULL | copiado, não juntado: o pedido pode sumir e o valor não pode |
+| currency | text NOT NULL DEFAULT 'BRL' | ISO-4217 (CHECK) |
+| attributed_at | timestamptz NOT NULL DEFAULT now() | pedido pago dentro de `tenants.attribution_window_hours` depois de um toque enviado |
 | created_at | timestamptz | |
+
+> **Por que a tabela existe.** `messages` tem TTL rolante de 12 meses e a conversa pode ser apagada; recalcular a atribuição depois é impossível. Toda FK é `ON DELETE SET NULL` pelo mesmo motivo: o que aconteceu tem que sobreviver ao desaparecimento daquilo a que aconteceu.
 
 ---
 
@@ -460,3 +485,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 4. FKs de logs de alto volume (`judge_scores`, `tool_calls`, `llm_calls`) com `ON DELETE CASCADE` a partir de conversas — a purga TTL e a purga de lojista arrastam os derivados.
 5. Embeddings (`knowledge_chunks.embedding`) entram na purga LGPD por contato apenas quando derivados de conversa — chunks de FAQ/política do lojista não contêm dados de titulares.
 6. Nenhuma coluna de CPF/nascimento existe neste dicionário — coerente com o default "não coletar" (pendência nº 7 da arquitetura); se a decisão mudar, entra tabela própria cifrada sob envelope encryption, nunca colunas soltas.
+7. **O teto de 4 toques proativos por contato/24h é CHECK, não convenção** (RF-034 / E3 · D1): `tenants.proactive_max_per_contact_24h CHECK (BETWEEN 1 AND 4)`. Nenhum caminho de escrita, em nenhuma camada, consegue passar de 4 — e afrouxar dentro da faixa só acontece por `internal.set_proactive_cap()` (SECURITY DEFINER, EXECUTE revogado de PUBLIC, grava `audit_log`), com um trigger recusando qualquer alteração da coluna que não venha de lá. O privilégio sozinho não bastaria: um `GRANT UPDATE ON tenants` para a tela de configurações do E5 devolveria a coluna ao lojista sem nenhum teste ficar vermelho.
+8. **Índice único parcial** garantindo um único `funnels.enabled = true` por (tenant, ocasião) — mesmo dispositivo da nota 1.
+9. **Estados pela metade proibidos por CHECK** em `scheduled_touches`: toque `sent` sem `sent_at` some do cooldown de 72h; toque `cancelled` sem `cancel_reason` continua movendo o total e destrói a única métrica que o diagnostica.
+10. `funnel_conversions` **não é arrastada por purga nenhuma** (FKs `ON DELETE SET NULL`): receita recuperada tem que sobreviver ao TTL de `messages` e à purga por contato.
