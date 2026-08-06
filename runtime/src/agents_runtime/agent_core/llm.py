@@ -20,9 +20,9 @@ D1 (decisão 79) is written into the types:
 port asks for extended reasoning, it never decides that it is warranted.
 """
 
-from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Protocol
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 #: Everything routes through OpenRouter (D1). Recorded on every row of
 #: `internal.llm_calls` next to the model, because the model varies per tenant
@@ -37,9 +37,47 @@ EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
 
 @dataclass(frozen=True, slots=True)
+class ToolSpec:
+    """What the model is told a tool is, and nothing more.
+
+    The description is PT-BR because the model reads it alongside a Brazilian
+    conversation — it is content, like the prompt, not code. `parameters` is a
+    JSON Schema for the ARGUMENTS OBJECT only: what the model may name. It is
+    never a statement about what the tool may reach, because the model's
+    arguments are hostile input and scope comes from the job.
+    """
+
+    name: str
+    description: str
+    parameters: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    """A tool the model asked for.
+
+    `arguments` is the RAW text the provider sent, not a parsed mapping, and
+    that is deliberate. A model is perfectly capable of emitting text that is
+    not JSON, and parsing it here would make a malformed call either an
+    exception that costs the customer their reply or — worse — an empty mapping
+    that reads as "no arguments" and runs the tool anyway. The parse belongs
+    where the failure can be handed back to the model to fix.
+    """
+
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True, slots=True)
 class Message:
     role: str
     content: str
+    #: Only on an `assistant` turn that asked for tools. The provider requires
+    #: its own request echoed back before it will read the answers.
+    tool_calls: tuple[ToolCall, ...] = ()
+    #: Only on a `tool` turn: which request this is the answer to.
+    tool_call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +85,9 @@ class ChatRequest:
     model: str
     messages: tuple[Message, ...]
     think: bool = False
+    #: What the model may choose from on THIS call. Empty means "answer with
+    #: what you have" — which is how the loop's ceiling terminates.
+    tools: tuple[ToolSpec, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +108,9 @@ class ChatResult:
     #: always the string the caller asked for.
     model: str
     provider: str = PROVIDER
+    #: Empty on every turn where the model answered instead of asking. A caller
+    #: that ignores this field gets exactly the E2 behaviour.
+    tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
