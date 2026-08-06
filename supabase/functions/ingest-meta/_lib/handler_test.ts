@@ -6,7 +6,7 @@
 // wrong is either an event redelivered forever or an event lost in silence, so
 // each branch gets a test that also checks whether the database was touched.
 
-import { assert, assertEquals } from "jsr:@std/assert@^1.0.0";
+import { assert, assertEquals } from "jsr:@std/assert@1.0.0";
 
 import { type Deps, handleRequest, type IngestPort } from "./handler.ts";
 import type { InboundMessage } from "./schema.ts";

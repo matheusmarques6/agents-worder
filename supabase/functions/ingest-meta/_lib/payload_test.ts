@@ -6,7 +6,7 @@
 // rename, a nesting, a title used instead of an id — and the refusal is not
 // recognised, the contact keeps receiving, and nothing fails loudly.
 
-import { assertEquals } from "jsr:@std/assert@^1.0.0";
+import { assertEquals } from "jsr:@std/assert@1.0.0";
 
 import { InboundMessage, StatusUpdate } from "./schema.ts";
 import { messageContent, statusCorrelation } from "./payload.ts";

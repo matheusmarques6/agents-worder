@@ -2,7 +2,7 @@
 // consumes. An unexpected field is dropped, a wrong type is a rejection, and a
 // half-formed event never becomes a half-formed row.
 
-import { assert, assertEquals, assertFalse } from "jsr:@std/assert@^1.0.0";
+import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1.0.0";
 
 import {
   ButtonReply,

@@ -1,7 +1,7 @@
 // The first boundary, under test: a request that is not Meta's never reaches
 // the database, and a request that is Meta's is not rejected by accident.
 
-import { assert, assertEquals, assertFalse } from "jsr:@std/assert@^1.0.0";
+import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1.0.0";
 
 import {
   type HexLike,
