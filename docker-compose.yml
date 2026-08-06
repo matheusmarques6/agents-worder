@@ -1,0 +1,60 @@
+services:
+  runtime:
+    build:
+      context: ./runtime
+      dockerfile: Dockerfile
+    environment:
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      AGENTS_PROCESS_NAME: ${AGENTS_PROCESS_NAME:-agents-runtime-docker}
+      AGENTS_WORKER_SET_ROLE: ${AGENTS_WORKER_SET_ROLE:-worker_role}
+      AGENTS_SENDER_SET_ROLE: ${AGENTS_SENDER_SET_ROLE:-sender_role}
+      AGENTS_RESPONDER: ${AGENTS_RESPONDER:-}
+      AGENTS_OPENROUTER_API_KEY: ${AGENTS_OPENROUTER_API_KEY:-}
+      AGENTS_CHANNEL: ${AGENTS_CHANNEL:-}
+      AGENTS_META_ACCESS_TOKEN: ${AGENTS_META_ACCESS_TOKEN:-}
+      AGENTS_META_API_VERSION: ${AGENTS_META_API_VERSION:-v19.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, psycopg; psycopg.connect(os.environ['SUPABASE_DB_URL'], connect_timeout=5).close()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  hub:
+    build:
+      context: ./hub
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://host.docker.internal:54321}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      DESIGN_SHOWCASE: ${DESIGN_SHOWCASE:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${HUB_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

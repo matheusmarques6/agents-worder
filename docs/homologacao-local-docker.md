@@ -1,0 +1,106 @@
+# Homologacao local com Docker
+
+Esta stack preserva a arquitetura atual do repo:
+
+- `supabase/` continua subindo pelo Supabase CLI local.
+- `runtime/` sobe no seu proprio container pelo `docker compose`.
+- `hub/` sobe no seu proprio container pelo `docker compose`.
+
+O compose nao cria outro Postgres nem tenta substituir o Supabase local. Os
+containers falam com o stack do CLI via variaveis de ambiente.
+
+## Pre-requisitos
+
+- Docker Desktop com `docker compose`
+- Supabase CLI instalado na maquina host
+
+## Variaveis de ambiente
+
+1. Crie `.env` na raiz a partir de `.env.example`.
+2. Ajuste apenas o que precisar.
+
+Defaults importantes:
+
+- `SUPABASE_DB_URL` aponta para o Postgres local do Supabase CLI em
+  `host.docker.internal:54322`.
+- `NEXT_PUBLIC_SUPABASE_URL` aponta para a API local do Supabase CLI em
+  `host.docker.internal:54321`.
+- `AGENTS_RESPONDER` vazio preserva o responder fixo atual do runtime.
+- `AGENTS_CHANNEL` vazio preserva o sender desligado, como o codigo ja faz hoje.
+
+Se quiser subir o agente real no `runtime`, defina:
+
+```env
+AGENTS_RESPONDER=agents_runtime.agent_core.responder:agent_responder
+AGENTS_OPENROUTER_API_KEY=...
+```
+
+Se quiser ligar o sender da Cloud API, defina tambem:
+
+```env
+AGENTS_CHANNEL=agents_runtime.channels.cloud_api:from_env
+AGENTS_META_ACCESS_TOKEN=...
+AGENTS_META_API_VERSION=v19.0
+```
+
+## Subida
+
+1. No Windows com Docker Desktop, materialize o arquivo que o Postgres do
+   Supabase monta para o `pgsodium`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure-supabase-start-secrets.ps1
+```
+
+Sem esse arquivo, o bind mount vira diretorio vazio no Linux VM do Docker
+Desktop e o container `supabase_db_*` entra em loop com `FATAL: invalid secret
+key`.
+
+2. Suba o Supabase local.
+
+Para a homologacao mais completa, incluindo API local e Edge Functions:
+
+```powershell
+supabase start
+```
+
+Se voce quiser apenas banco local para o `runtime` e nao for usar API local,
+Studio nem `ingest-meta`, pode usar o modo enxuto:
+
+```powershell
+supabase start -x "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"
+```
+
+3. Aplique as migrations locais:
+
+```powershell
+supabase db reset
+```
+
+4. Suba `runtime` e `hub`:
+
+```powershell
+docker compose up --build
+```
+
+5. Abra o hub em `http://localhost:3000`.
+
+## Operacao
+
+Ver logs:
+
+```powershell
+docker compose logs -f runtime hub
+```
+
+Parar os containers do app:
+
+```powershell
+docker compose down
+```
+
+Parar o Supabase local:
+
+```powershell
+supabase stop
+```
