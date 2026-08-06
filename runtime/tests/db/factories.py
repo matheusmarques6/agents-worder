@@ -171,6 +171,10 @@ def create_outbox_item(
     thread: Thread,
     *,
     status: str = "pending",
+    # S7: `kind` decides whether a row is a proactive one, and the whole
+    # anti-ban asymmetry hangs on that. Additive with the value every existing
+    # caller already got, so nothing that came before can read differently.
+    kind: str = "reply",
 ) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
@@ -178,7 +182,7 @@ def create_outbox_item(
             insert into internal.message_outbox
                 (tenant_id, conversation_id, contact_id, channel_account_id,
                  kind, payload, idempotency_key, status)
-            values (%s, %s, %s, %s, 'reply', %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
             returning id
             """,
             (
@@ -186,6 +190,7 @@ def create_outbox_item(
                 thread.conversation_id,
                 thread.contact_id,
                 thread.channel_account_id,
+                kind,
                 psycopg.types.json.Jsonb({"text": "resposta"}),
                 unique_id("idem"),
                 status,

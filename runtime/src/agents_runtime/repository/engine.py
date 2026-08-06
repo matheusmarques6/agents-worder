@@ -12,7 +12,7 @@ so they take the connection mid-transaction and never commit.
 
 import math
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -21,6 +21,7 @@ from psycopg.types.json import Jsonb
 
 from agents_runtime.channels.port import ClaimedSend
 from agents_runtime.dispatch.ladder import ProactiveTouch
+from agents_runtime.queueing.antiban import Pacing
 
 # Re-exported so every caller from E1 keeps its import. The definition moved to
 # `repository.scope` because this module imports `channels.port`, and modules
@@ -344,29 +345,89 @@ async def coalesce_due_conversations(
 # --- the outbox --------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class ClaimedRow:
+    """One claimed outbox row: what to send, and the rhythm the number may send at.
+
+    Two objects rather than one flat record, because the boundary is real: the
+    channel adapter receives `send` and nothing else. An adapter that could see
+    `Pacing` would be an adapter that could decide to ignore it — and delivery
+    rhythm is the sender's, never the provider's (D10).
+    """
+
+    send: ClaimedSend
+    pacing: Pacing
+    channel_account_id: UUID
+    """Which number this leaves by. Not on `Pacing` because the rule does not
+    need it — a pure gate weighs facts, it does not address rows — and not on
+    `ClaimedSend` because the adapter has no business with our account ids."""
+
+
 async def claim_outbox_batch(
     conn: psycopg.AsyncConnection,
     token: UUID,
     *,
     lease: timedelta,
     limit: int = 50,
-) -> list[ClaimedSend]:
+) -> list[ClaimedRow]:
     cursor = await conn.execute(
         "select * from internal.claim_outbox_batch(%s, %s, %s)", (token, limit, lease)
     )
     return [
-        ClaimedSend(
-            outbox_id=row[0],
-            tenant_id=row[1],
-            channel_type=row[2],
-            channel_external_id=row[3],
-            to_phone_e164=row[4],
-            payload=row[5],
-            idempotency_key=row[6],
-            attempt_count=row[7],
+        ClaimedRow(
+            send=ClaimedSend(
+                outbox_id=row[0],
+                tenant_id=row[1],
+                channel_type=row[2],
+                channel_external_id=row[3],
+                to_phone_e164=row[4],
+                payload=row[5],
+                idempotency_key=row[6],
+                attempt_count=row[7],
+            ),
+            pacing=Pacing(
+                channel_type=row[2],
+                proactive=row[8],
+                risk_accepted=row[10],
+                warmup_stage=row[11],
+                daily_cap=row[12],
+                sends_today=row[13],
+                next_send_at=row[14],
+            ),
+            channel_account_id=row[9],
         )
         for row in await cursor.fetchall()
     ]
+
+
+async def defer_outbox_send(
+    conn: psycopg.AsyncConnection, outbox_id: UUID, token: UUID, *, retry_in: timedelta
+) -> bool:
+    """Put the row back without spending an attempt — waiting is not failing."""
+    cursor = await conn.execute(
+        "select internal.defer_outbox_send(%s, %s, %s)", (outbox_id, token, retry_in)
+    )
+    return bool((await cursor.fetchone())[0])
+
+
+async def record_channel_send(
+    conn: psycopg.AsyncConnection,
+    channel_account_id: UUID,
+    *,
+    proactive: bool,
+    next_send_at: datetime | None,
+    tier_pause_fraction: float,
+) -> None:
+    """Count what left, so the ceilings and the Meta tier know about it.
+
+    `tier_pause_fraction` travels from `dispatch.ladder`, the same constant the
+    ladder BLOCKS with. A copy of 0.8 in SQL would be the day the alert fires at
+    one threshold and the pause happens at another.
+    """
+    await conn.execute(
+        "select internal.record_channel_send(%s, %s, %s, %s)",
+        (channel_account_id, proactive, next_send_at, tier_pause_fraction),
+    )
 
 
 async def mark_outbox_sent(

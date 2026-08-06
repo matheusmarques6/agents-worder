@@ -291,7 +291,13 @@ async def run(
 
             async def sender() -> None:
                 while not stop.is_set():
-                    await sender_pass(sender_conn, channel, config=config, randomness=randomness)
+                    await sender_pass(
+                        sender_conn,
+                        channel,
+                        config=config,
+                        randomness=randomness,
+                        clock=clock,
+                    )
                     await _sleep_or_stop(clock, stop, config.sender_poll.total_seconds())
 
             tasks.append(asyncio.create_task(sender(), name="sender"))

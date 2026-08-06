@@ -98,6 +98,16 @@ class QueueingConfig:
     # in seconds); the canonical table should absorb or veto it (pendência).
     unknown_review_after: timedelta = timedelta(minutes=5)
 
+    # How long a row waits when the number's own ceiling — not its jitter — held
+    # it back (S7). The jitter knows exactly what is left of itself and says so;
+    # a daily cap has no such answer, because "tomorrow" depends on a clock the
+    # rule deliberately does not read. Fifteen minutes is a recheck interval, not
+    # a canonical number: it costs one cheap claim and it means a warm-up stage
+    # advanced by an operator takes effect within the quarter hour instead of at
+    # midnight. DECISION, recorded here rather than in the CLAUDE.md table,
+    # because nothing in the product depends on the value.
+    paced_retry: timedelta = timedelta(minutes=15)
+
 
 def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
     """The canonical defaults, overridable per environment.
