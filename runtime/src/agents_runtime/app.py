@@ -21,7 +21,7 @@ from collections.abc import Mapping
 
 import psycopg
 
-from agents_runtime.agent_core.responder import FIXED_TOUCH, Responder, fixed_responder
+from agents_runtime.agent_core.responder import Responder, fixed_responder
 from agents_runtime.agent_core.review import Reviewer
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
@@ -155,7 +155,11 @@ async def run(
             # the event row. Only an exception (bug, database down) climbs to
             # the loop's retry ladder. No tenant slot: the cap exists for LLM
             # turns, and this is one short SQL call.
-            await engine.apply_domain_event(conn, job.webhook_event_id, touch_text=FIXED_TOUCH)
+            #
+            # Nothing is sent from here since E3 S3: the call materialises the
+            # funnel's cadence in `scheduled_touches`, and the dispatcher of S4
+            # is the single door to the outbox (D11).
+            await engine.apply_domain_event(conn, job.webhook_event_id)
             return Ack.ARCHIVE
 
         return handle

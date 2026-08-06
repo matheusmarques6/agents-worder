@@ -80,6 +80,14 @@ def create_order(
     return order_id
 
 
+#: The default cadence — kept exactly as S2 wrote it inline, so a test that
+#: does not care about timing gets the same two touches it always got.
+DEFAULT_TOUCHES = [
+    {"n": 1, "delay": "PT0S", "copy_base": "Vi que você deixou o carrinho."},
+    {"n": 2, "delay": "PT24H", "copy_base": "Ainda dá tempo de concluir."},
+]
+
+
 def create_funnel(
     conn: psycopg.Connection,
     tenant_id: uuid.UUID,
@@ -88,7 +96,10 @@ def create_funnel(
     enabled: bool = True,
     channel_preference: str = "auto",
     max_touches: int = 4,
+    touches: list[dict] | None = None,
 ) -> Funnel:
+    """`touches` is additive (S3): S2's callers keep the cadence they had, and a
+    test that reasons about `due_at` states its own."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -102,12 +113,7 @@ def create_funnel(
                 occasion,
                 enabled,
                 channel_preference,
-                psycopg.types.json.Jsonb(
-                    [
-                        {"n": 1, "delay": "PT0S", "copy_base": "Vi que você deixou o carrinho."},
-                        {"n": 2, "delay": "PT24H", "copy_base": "Ainda dá tempo de concluir."},
-                    ]
-                ),
+                psycopg.types.json.Jsonb(DEFAULT_TOUCHES if touches is None else touches),
                 max_touches,
             ),
         )

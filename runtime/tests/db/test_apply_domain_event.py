@@ -1,32 +1,45 @@
-"""O handler de `q_domain_events`, lado SQL — `internal.apply_domain_event()`.
+"""O handler de `q_domain_events`, lado SQL — os desfechos que NÃO tocam.
 
-O toque do fio (prova 1 do marco): um evento de plataforma já ingerido vira UM
-registro na outbox, com texto fixo, numa transação só. Não é o funil do E3 —
-sem supressão, sem quota, sem rate limit, sem agendamento. É a espinha: o
-caminho evento → contato → conversa → outbox existindo de ponta a ponta.
+Este arquivo nasceu no E1 provando o toque de texto fixo: um evento já ingerido
+virava UM registro na outbox, numa transação só. O E3 S3 aposentou esse toque
+(decisão D6 do `docs/plano-e3-recuperacao.md`) — a própria migration que o
+criou já o declarava andaime ("This is deliberately NOT the E3 funnel"). O
+abandono agora vira a **cadência** de um funil, e as três provas que afirmavam
+o texto fixo (`applied` com o registro na outbox, a reentrega contada em linhas
+de outbox, e o reúso da conversa aberta) morreram junto com a função que o
+produzia. As duas últimas renasceram em `tests/db/test_start_funnel_run.py`,
+onde existe um funil para elas afirmarem algo.
+
+O que sobrevive aqui é exatamente o que não depende de funil nenhum, e é o que
+autorizou a emenda da Lei 1: `already_applied` (provado com cadência no arquivo
+novo), `invalid_payload`, `no_channel`, o descarte do tipo não suportado, o
+EXECUTE mínimo, e o único caso que **levanta** — um job apontando para evento
+que não existe.
 
 Contrato do payload de plataforma (decisão desta unidade): o telefone do
 contato viaja em `phone`, E.164 com `+`. Quem monta esse payload é a Edge
 Function do conector (E8) — ou a demo, chamando `ingest_webhook` diretamente.
 
 Desfechos são dados, não exceções: `applied`, `already_applied`, `discarded`,
-`invalid_payload`, `no_channel`. Exceção fica reservada para o que É bug — um
-job apontando para evento que não existe.
+`invalid_payload`, `no_channel`, `no_funnel`. Exceção fica reservada para o que
+É bug.
 """
 
 import psycopg
 import pytest
-from psycopg.types.json import Jsonb
 
-from tests.db.conftest import TwoTenants, as_app_role
+from tests.db.conftest import TwoTenants
 from tests.db.factories import (
     ChannelAccount,
     create_channel_account,
     create_webhook_event,
-    unique_id,
     unique_phone,
 )
 
+#: O texto aposentado. Continua aqui como argumento da forma de duas casas da
+#: função — o shim N-1 do expand-contract, que o ignora desde o S3. Chamar por
+#: ele é o que mantém estas provas exercitando o caminho que a imagem anterior
+#: do runtime ainda usa durante um deploy.
 TOUCH = "Vimos que ficou algo no seu carrinho! Posso ajudar a finalizar? 🧡"
 
 
@@ -69,115 +82,26 @@ def abandonment(
     )
 
 
-# --- o caminho feliz, com a identidade real ----------------------------------
-
-
-def test_an_abandonment_becomes_exactly_one_touch(
-    dsn: str,
-    admin: psycopg.Connection,
-    two_tenants: TwoTenants,
-    number: ChannelAccount,
-) -> None:
-    """O teste roda como `worker_role` — a identidade que o handler usa em produção.
-
-    O grant e o SECURITY DEFINER são parte do que se prova: se qualquer um dos
-    dois faltar, não é o assert que falha, é a chamada.
-    """
-    phone = unique_phone()
-    event_id = abandonment(admin, two_tenants.a.id, phone=phone)
-
-    with as_app_role(dsn, "worker_role", two_tenants.a.id) as worker:
-        status, conversation_id, outbox_id = apply_event(worker, event_id)
-        worker.commit()
-
-    assert status == "applied"
-    assert conversation_id is not None
-    assert outbox_id is not None
-
-    # O contato nasceu do payload, telefone E.164 intacto.
-    contact = admin.execute(
-        "select phone_e164 from public.contacts where tenant_id = %s",
-        (two_tenants.a.id,),
-    ).fetchall()
-    assert contact == [(phone,)]
-
-    # A conversa carrega a ocasião do evento — é ela que o E3 vai ler para
-    # saber de onde a conversa veio.
-    origin = admin.execute(
-        "select origin_occasion, channel_account_id from public.conversations where id = %s",
-        (conversation_id,),
-    ).fetchone()
-    assert origin == ("checkout_abandoned", number.id)
-
-    # UM registro na outbox: um toque, texto fixo, chave derivada do evento —
-    # a reentrega do job jamais poderia cunhar uma segunda chave.
-    rows = outbox_rows(admin, two_tenants.a.id)
-    assert rows == [("funnel_touch", {"text": TOUCH}, f"touch-{event_id}", "pending")]
-
-    # A mensagem outbound existe, sequenciada pelo contador oficial.
-    outbound = admin.execute(
-        "select direction, seq, author_type from public.messages where conversation_id = %s",
-        (conversation_id,),
-    ).fetchall()
-    assert outbound == [("outbound", 1, "agent")]
-
-    # E o evento tem desfecho com carimbo — o rastro que a reentrega vai ler.
-    event = admin.execute(
-        "select status, processed_at is not null from internal.webhook_events where id = %s",
-        (event_id,),
-    ).fetchone()
-    assert event == ("processed", True)
-
-
-# --- idempotência -------------------------------------------------------------
-
-
-def test_reapplying_a_processed_event_is_a_no_op(
-    admin: psycopg.Connection, two_tenants: TwoTenants, number: ChannelAccount
-) -> None:
-    # pgmq reentrega: VT vencido, crash depois do commit, qualquer motivo
-    # normal. A segunda aplicação precisa ser um não-acontecimento — o cliente
-    # que abandonou UM carrinho recebe UM toque.
-    event_id = abandonment(admin, two_tenants.a.id)
-
-    first = apply_event(admin, event_id)
-    second = apply_event(admin, event_id)
-
-    assert first[0] == "applied"
-    assert second[0] == "already_applied"
-    assert len(outbox_rows(admin, two_tenants.a.id)) == 1
-
-
-# --- a conversa ---------------------------------------------------------------
-
-
-def test_the_touch_reuses_an_open_conversation(
-    admin: psycopg.Connection, two_tenants: TwoTenants, number: ChannelAccount
-) -> None:
-    # O contato já conversa com a loja. O toque entra NA conversa aberta — uma
-    # segunda conversa dividiria o histórico e o contador de seq.
-    phone = unique_phone()
-    inbound = admin.execute(
-        "select * from internal.ingest_webhook('meta', %s, %s, 'message_inbound', %s)",
-        (
-            number.external_account_id,
-            unique_id("evt"),
-            Jsonb({"from": phone, "message": {"text": "oi"}}),
-        ),
-    ).fetchone()
-    existing_conversation = inbound[3]
-
-    event_id = abandonment(admin, two_tenants.a.id, phone=phone)
-    status, conversation_id, _ = apply_event(admin, event_id)
-
-    assert status == "applied"
-    assert conversation_id == existing_conversation
-
-    conversations = admin.execute(
-        "select count(*) from public.conversations where tenant_id = %s",
-        (two_tenants.a.id,),
-    ).fetchone()[0]
-    assert conversations == 1
+# --- o que morreu com o texto fixo (D6) ---------------------------------------
+#
+# Três provas viviam aqui e não sobrevivem à aposentadoria do toque fixo, porque
+# as três afirmavam o registro que ele produzia na outbox:
+#
+#   * `test_an_abandonment_becomes_exactly_one_touch` — o caminho feliz do E1,
+#     `("funnel_touch", {"text": TOUCH}, "touch-<id>", "pending")`. Sob a D11
+#     nenhum toque vai direto para a outbox, então não há registro a afirmar.
+#     Sucessor: `test_an_abandonment_materialises_the_whole_cadence`.
+#   * `test_reapplying_a_processed_event_is_a_no_op` — contava linhas de outbox
+#     para provar a reentrega. O invariante `already_applied` sobreviveu
+#     inteiro e agora afirma o que a reentrega poderia duplicar de verdade, uma
+#     cadência: `test_reapplying_a_processed_event_creates_no_second_cadence`.
+#   * `test_the_touch_reuses_an_open_conversation` — o reúso da conversa
+#     aberta, que continua sendo regra e agora exige um funil para chegar a
+#     `applied`: `test_the_cadence_lands_in_the_open_conversation`.
+#
+# Todas as três estão em `tests/db/test_start_funnel_run.py`. O que segue abaixo
+# é o que nunca dependeu de funil nenhum, e continua idêntico ao que o E1
+# escreveu.
 
 
 # --- desfechos que não tocam --------------------------------------------------
