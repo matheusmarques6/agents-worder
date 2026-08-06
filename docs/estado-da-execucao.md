@@ -1,16 +1,23 @@
 # Estado da execução — retomada
 
-**Atualizado:** 2026-08-03 · **Marco:** E2 (`docs/plano-e2-agente-real.md`) · **Branch:** um por passo (`e2/sN-...`), PR contra `main`
+**Atualizado:** 2026-08-06 · **Marco:** E2 (`docs/plano-e2-agente-real.md`) · **Branch:** um por passo (`e2/sN-...`), PR contra `main`
 
 Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o plano do marco corrente e o `CLAUDE.md` — nessa ordem — e continua. E0 e E1 estão fechados em código; o histórico dos dois segue abaixo, na íntegra.
 
 ---
 
-## Em uma tela: onde o E2 está (2026-08-03)
+## Em uma tela: onde o E2 está (2026-08-06)
 
-**`main` em `438653c`. Nada pendente fora do git, nenhum PR aberto.** Suítes na
-última execução: **858** em `unit or db` · **33** em `pipeline` (1 pulado no
-Windows) · **2** em `contract` (rodaram contra a API real do OpenRouter).
+**`main` em `288be7f`. Nada pendente fora do git, nenhum PR aberto.** Suítes
+rodadas na máquina nova em 2026-08-06: **858** em `unit or db` · **33** em
+`pipeline` (1 pulado no Windows). A `contract` não roda aqui ainda — a chave do
+OpenRouter é a pendência nº 1 abaixo.
+
+**Correção do próprio arquivo:** a versão de 2026-08-03 afirmava "nenhum PR
+aberto" enquanto o **#50 esperava merge havia três dias**, verde e limpo. Quem
+retomar não deve confiar nesta linha sem conferir contra o remoto
+(`gh pr list`); um PR aberto e esquecido é estado que o repositório tem e o
+documento não.
 
 | Passo | Estado | PR |
 |---|---|---|
@@ -20,8 +27,9 @@ Windows) · **2** em `contract` (rodaram contra a API real do OpenRouter).
 | S7 tools autovalidantes | ✅ | #46 |
 | S8 Judge 1 pré-envio + ramo de não-envio no CAS | ✅ | #47 |
 | S9a responder real na composição | ✅ | #48 |
-| **S9b** shadow + `q_evals` + pós-envio + auto-correção | ⬜ **próximo** | — |
+| **S9b** medidor de perigo + `q_evals` + pós-envio + auto-correção | ⬜ **próximo** | — |
 | S10 observabilidade · PR-EF dívida da EF · S11 pack real · S12 provas | ⬜ | — |
+| chore stack de homologação (Docker) · fix responder obrigatório | ✅ | #50, #51 |
 
 **O agente já responde de ponta a ponta**: mensagem entra pela ingestão, o
 coalescer cria o job, o responder carrega a versão ativa, mede o think-gate,
@@ -170,7 +178,7 @@ Os quadros de "Onde paramos" são o **registro** — item, estado e prova execut
 - [x] **S7 · tools com autovalidação** — decisão 86 (PR #46) · `search_knowledge` + `get_customer_context`, cada uma abrindo transação curta própria e gravando `internal.tool_calls` · 3 sabotagens de raio exato (tool confiando no `tenant_id` dos argumentos → 1 · embedding dentro da transação → 1 · falha sem rastro → 1)
 - [x] **S8 · Judge 1 pré-envio** — decisão 87 (PR #47) · regra por severidade fixada com o Bruno · `internal.conclude_turn` ganha o ramo de não-envio (aditivo, mesma assinatura) · **sabotagem-coroa medida: tirar o Judge do caminho derruba 10 testes**, as duas metades do cenário `pipeline` e os 8 do laço
 - [x] **S9a · responder real na composição** — decisão 88 (PR #48) · a costura D5 viva: carrega versão ativa, think-gate, conhecimento, camadas do RF-010, LLM medido e Judge 1, com o motor intocado · **fecha a pendência do S8** (score e alerta agora são gravados pelo responder, não pelo chamador) · 2 achados de infraestrutura e 1 de método
-- [ ] **S9b · shadow + `q_evals` + pós-envio + auto-correção** — o que falta do S9. Desenho já fixado: consumidor de `q_evals` no molde do handler de `q_domain_events` (desfechos como dado, arquiva em todos) · dentro da janela `tenants.shadow_until` **100%** das respostas enfileiram para avaliação e o eval **nunca** retém envio; fora dela, amostragem pelo `Randomness` injetado · `critical` no pós-envio → auto-correção, e **a correção é um outbound normal pela outbox que passa pelo Judge 1 como qualquer resposta** (a lei dos 100% não tem porta lateral) · exige migration nova para enfileirar a correção sem CAS (não há turno), no molde do `apply_domain_event` · sabotagem obrigatória: correção pulando o Judge → reprova
+- [ ] **S9b · medidor de perigo + `q_evals` + pós-envio + auto-correção** — o que falta do S9. Desenho fixado nas decisões **91 e 92**: quem enfileira é o `conclude_turn`, atômico com a outbox (nunca o responder — o CAS pode descartar o rascunho) · consumidor de `q_evals` no molde do handler de `q_domain_events` (desfechos como dado, arquiva em todos: `evaluated | skipped_low_risk | already_evaluated | corrected | invalid_payload`) · o eval **nunca** retém envio · dentro da janela `tenants.shadow_until` avalia **100%**; fora dela decide o **medidor de perigo** determinístico, irmão do think-gate — sem `Randomness`, sem sorteio · o consumidor pega slot do `TenantSlots` (é chamada de LLM, diferente do handler de domínio) · `critical` no pós-envio → auto-correção, e **a correção é um outbound normal pela outbox que passa pelo Judge 1 como qualquer resposta** (a lei dos 100% não tem porta lateral) · exige migration nova para enfileirar a correção sem CAS (não há turno), no molde do `apply_domain_event` · sabotagem obrigatória: correção pulando o Judge → reprova
 - [ ] **S10 · T4 / observabilidade** — E0-19 compose com Alloy + redação de PII no processor · E0-20 módulo `obs/` com teste que reprova sem `service.name`/`deployment.environment` · E0-21 mesmo `trace_id` nos dois backends (fecha a prova 3 das oito) · cenário 14 (`traceparent` no slot `otel` atravessando as filas) · spans de custo a partir de `llm_calls`, **conteúdo nunca** · **é aqui que o `AGENTS_RESPONDER` do compose passa a apontar para `agents_runtime.agent_core.responder:agent_responder`**
 - [ ] **PR-EF · dívida da Edge Function `ingest-meta`** — rota (a): extrair as partes puras para `_lib/` (HMAC em tempo constante, zod estrito, ramos 401/200/500) + `deno test` + job `edge-tests` no `pr.yml` (a `main` passa a exigir **5** checks). Antes do S12, que exercita justamente essa porta
 - [ ] **S11 · pack contra o LLM real** — runner ligando pack + rubricas ao responder real e ao judge real; itera até **cada rubrica ≥ 0,85 e zero `critical`**; runs persistidos (retoma de onde parou); aprovado → versão vira `active` no tenant de teste. **Não é CI**, roda sob demanda com a chave
@@ -258,11 +266,20 @@ uv run --directory runtime pytest -m pipeline       # esperado: 33 verdes, 1 pul
 **Aspas na lista do `-x` são obrigatórias** (o PowerShell trata vírgula como array e
 passa só o primeiro nome, em silêncio).
 
-### 4. Duas armadilhas que já custaram tempo
+**Executado em 2026-08-06 na máquina nova, e bateu exato:** 858 e 33/1. As versões
+que subiram são mais novas que as da tabela acima — **uv 0.12.0** e **pnpm 11.20.0** —
+e não mudaram nada. O `gh` precisou de `gh auth login` à parte: o `git push` funciona
+pelo credential manager do Windows, o `gh` usa outra credencial e não herda essa.
+
+### 4. Três armadilhas que já custaram tempo
 
 - **`db` e `pipeline` NUNCA rodam ao mesmo tempo** contra o mesmo banco: o nível
   `pipeline` limpa a base inteira entre testes (`clean_slate`). Rodar em paralelo
   produziu 18 falhas fantasma que sumiram sozinhas em série (decisão 87).
+- **A stack de homologação também disputa o banco.** Com o container `runtime` do
+  `docker compose` de pé, ele consome `q_inbound` e rouba jobs dos testes: o cenário
+  4a reprova com `the turn held inside FASE 2`, acusando o motor sem motivo.
+  `docker compose stop runtime` antes de `-m pipeline` (decisão 90).
 - **Nunca reescrever arquivo-fonte por `Get-Content`/`Set-Content`**: a leitura
   interpreta UTF-8 como ANSI e a escrita re-codifica, corrompendo todo acento do
   arquivo. Aconteceu no S9a com o `responder.py`; o conserto foi
@@ -454,6 +471,17 @@ Ficam registradas aqui porque mudam como o código se comporta:
     **Lei 1 respeitada sem escalar:** dois cenários `pipeline` subiam o processo contando com o fallback. Nenhum teste foi editado — quem passou a declarar o responder foi o **harness**, ao lado do `AGENTS_CHANNEL` que ele já declarava (`tests/support/constant_reply.py`). Mesmos 33 cenários, mesmo comportamento, uma porta a menos. `fixed_responder` não pode ser apontado direto: o contrato da fábrica é `callable(dsn)` e o primeiro parâmetro dele é o TEXTO, então o spec ingênuo faria todo cenário responder com a URL do banco.
     **A armadilha do S4, agora comigo.** A primeira versão do teste chamava `_factory_from_env(..., required=True)` **direto** — e a sabotagem que removia `required=True` do ponto de chamada **passou com 577 verdes**: o teste afirmava o próprio argumento. Reescrito para entrar por `_serve`, a mesma porta que produção usa; a mesma sabotagem passou a derrubar exatamente 3. **Regra que fica, irmã da do S4: teste de fiação tem de entrar pela porta que a produção entra — testar o helper prova o helper, não a ligação.**
     Pendência que nasce daqui: quando o compose do E0-19 existir, `AGENTS_RESPONDER` é item obrigatório dele, e a fumaça de produção deve provar a **recusa** (subir sem a variável e ver o processo morrer), não só o caminho feliz.
+
+90. **A stack de homologação entrou no repositório, e trouxe uma colisão nova (PR #51).** `docker-compose.yml` sobe `runtime` e `hub` ao lado do Supabase CLI, que continua dono do banco — sem segundo Postgres, falando com o stack local por `host.docker.internal`. O `scripts/ensure-supabase-start-secrets.ps1` materializa a chave do `pgsodium` que o container do banco monta: sem ela o Docker Desktop cria um diretório vazio no lugar e o `supabase_db_*` entra em laço com `FATAL: invalid secret key`, mensagem que não aponta para a causa.
+    **A colisão, achada rodando a suíte com a stack de pé:** o container `runtime` consome as **mesmas filas do banco local** que o nível `pipeline` usa, e reivindicou um job que um teste acabara de criar. O cenário 4a reprovou com `predicate never became true: the turn held inside FASE 2` — mensagem que acusa o motor e não tem nada a ver com ele. Provado nos dois sentidos: **32 verdes / 1 falha** com o container ligado, **33 / 1 pulado** com ele parado. É a decisão 87 (`db` × `pipeline`) numa forma nova, e a regra que fica é a mesma: **quem escreve no mesmo banco disputa o mesmo estado** — parar o `runtime` antes de rodar `pipeline` é etapa, não zelo.
+    **Consequência do 89 sobre este PR, corrigida antes do merge:** ele nascera prometendo em três lugares (compose, `.env.example`, doc) que `AGENTS_RESPONDER` vazio preservava o responder fixo. Com o 89 na `main`, vazio é exatamente o que mata o processo — e deve. O compose passou a apontar para o responder real, de modo que o erro restante nomeie o que de fato falta (a chave do OpenRouter). **Não existe mais modo inerte para o runtime**: responder real + chave, ou o container não sobe.
+
+91. **S9b, quem enfileira a avaliação: o próprio `conclude_turn`, atômico com a outbox (fixado com o Bruno em 2026-08-06).** As três posições possíveis não são equivalentes. **No responder (recusada):** ele roda na FASE 2, antes do CAS — um rascunho descartado por mensagem nova seria avaliado mesmo sem nunca ter sido enviado, e um `critical` nele faria a auto-correção mandar ao cliente a correção de uma mensagem que não existiu para ele. **No worker depois do commit (recusada):** toca o motor (Lei 1) e abre janela de perda entre commit e enfileiramento — em shadow, "100% avaliado" viraria mentira silenciosa. **No `conclude_turn` (escolhida):** `create or replace` com a mesma assinatura, o precedente aditivo do S8; ou a mensagem e o bilhete existem, ou nenhum dos dois.
+
+92. **S9b, quem decide avaliar: medidor de perigo determinístico, NÃO amostragem aleatória (redesenhado pelo Bruno em 2026-08-06).** A proposta original era sortear uma fração fora da janela de shadow. Recusada pelo Bruno com a razão certa: sorteio trata "obrigado, até mais" e "seu reembolso de R$ 340 cai em 3 dias úteis" como se tivessem a mesma chance de estar errados. **Auditoria segue o risco, não a moeda.**
+    O medidor é o **irmão do think-gate do S4, do outro lado do turno**: o think-gate decide antes se a entrada merece raciocínio caro; o risk-gate decide depois se a resposta merece auditoria cara. Puro, determinístico, motivo como dado — e com ele o `Randomness` sai do desenho do S9b. Sinais, todos lidos da **resposta do agente**: valor/dinheiro · prazo/data · compromisso ("vou trocar", "garanto", "reembolso") · afirmação ancorada em conhecimento recuperado (`tool_calls`) · nota apertada ou regeneração do Judge 1 (`judge_scores`) · atrito vindo do think-gate. Nenhum sinal → arquiva como `skipped_low_risk`, sem pagar juiz. Dentro do shadow, 100% sem consultar o medidor.
+    **O medidor decide auditoria, nunca bloqueio** — segurança continua sendo 100% do Judge 1 pré-envio. Falso negativo dele custa medição, jamais proteção; é por isso que pode ser heurístico.
+    **O ponto cego, e como se fecha sem sorteio:** afirmação falsa sem número, data ou promessa ("sim, esse tênis é impermeável") escapa. Em vez de amostragem contínua, **lote de calibração sob demanda no molde do S11**: roda o juiz sobre o que o medidor DESCARTOU e compara. Violação achada ali = sinal novo, com teste vermelho primeiro. Vale a lei da casa: **trava que nunca foi confrontada com o que ela deixa passar é decoração.**
 
 ### Jurisprudência do worder1 — mapa de uso
 

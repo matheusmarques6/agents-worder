@@ -88,6 +88,7 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 | Agent model | per-tenant config (`model` in the `agent_versions` config), default `claude-sonnet-5` |
 | Judge 1 model | `claude-haiku-4-5`, **platform-fixed** — never per tenant (a safety gate does not weaken by customer config) |
 | Judge 1 pre-send regeneration limit | 2 · exhausted → do not send + row in `alerts` (human review) |
+| Post-send evaluation | 100% inside the tenant's `shadow_until` window · outside it a **deterministic risk gate** decides (value · deadline · commitment · knowledge-grounded claim · tight Judge 1 score · friction) — **never random sampling**; the gate's blind spots are closed by an on-demand calibration batch over what it skipped, never by a sampling floor. It gates auditing, never sending: Judge 1 pre-send stays at 100% |
 | Embedding | `text-embedding-3-small`, dimension 1536 (frozen in the schema: `vector(1536)`) |
 
 ## Stack
