@@ -195,6 +195,19 @@ class TouchSnapshot:
     #: are allowed to write to and obliged to ask (RF-033a).
     opt_status: str | None = None
 
+    #: `channels_accounts.type` of the number this touch would leave by (S7).
+    #: Read here because anti-ban copy variation is only ever applied on
+    #: Evolution — the Cloud sends an approved template, where varying the text
+    #: would be varying something Meta approved as written.
+    channel_type: str | None = None
+
+    #: The text of the last proactive message this contact received, from the
+    #: outbox — the one table every proactive origin passes through. It is what
+    #: "the copy never repeats the last one" is measured against, and it is read
+    #: in the SAME transaction as everything else so the comparison is against
+    #: the world the decision saw.
+    last_touch_text: str | None = None
+
 
 async def load_touch_snapshot(
     conn: psycopg.AsyncConnection,
@@ -242,7 +255,14 @@ async def load_touch_snapshot(
                coalesce(c.next_inbound_seq, 0),
                ca.meta_tier,
                coalesce(ca.tier_usage_24h, 0),
-               ct.opt_status
+               ct.opt_status,
+               ca.type,
+               (select ob.payload ->> 'text'
+                  from internal.message_outbox ob
+                 where ob.contact_id = t.contact_id
+                   and ob.kind in ('funnel_touch', 'followup')
+                 order by ob.created_at desc
+                 limit 1)
           from public.scheduled_touches t
           join public.funnels f on f.id = t.funnel_id
           join public.tenants tn on tn.id = t.tenant_id
@@ -275,7 +295,29 @@ async def load_touch_snapshot(
             tier_usage_24h=row[13],
         ),
         opt_status=row[14],
+        channel_type=row[15],
+        last_touch_text=row[16],
     )
+
+
+async def open_copy_violation_alert(
+    conn: psycopg.AsyncConnection,
+    tenant_id: UUID,
+    touch_id: UUID,
+    violations: tuple[str, ...],
+) -> bool:
+    """D3b: the deterministic gate stopped a variation, so a human is told.
+
+    One alert per touch, not per attempt — the job climbs the retry ladder and
+    three identical alerts for one touch would turn the signal into noise in the
+    exact place somebody has to react.
+    """
+    cursor = await conn.execute(
+        "select internal.open_copy_violation_alert(%s, %s, %s)",
+        (tenant_id, touch_id, list(violations)),
+    )
+    row = await cursor.fetchone()
+    return bool(row and row[0])
 
 
 @dataclass(frozen=True, slots=True)

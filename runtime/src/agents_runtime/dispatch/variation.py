@@ -28,6 +28,9 @@ phone. Only one of those two directions is recoverable.
 import re
 import unicodedata
 from collections.abc import Awaitable, Callable
+from typing import Protocol
+
+from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
 
 #: Every violation this module can report, as data. In the shape of
 #: `ladder.DENIAL_REASONS` and for the same reason: what blocks a send is read by
@@ -183,6 +186,69 @@ async def vary(
             return variant
         last = CopyRejected(violations, variant)
     raise last
+
+
+class CopyVariator(Protocol):
+    """Where a variation comes from. Injected, so the rule closes against a
+    stand-in with no API key — the discipline every LLM path of E2 already has."""
+
+    async def __call__(self, base: str, *, previous: str | None) -> str: ...
+
+
+#: PT-BR because the copy is PT-BR, and narrow because the validator is narrow:
+#: an instruction that invited creativity would produce variations the gate
+#: rejects, and a touch rejected twice does not go out at all. The prompt and the
+#: validator have to want the same thing — the prompt asks for what the gate
+#: permits, and the gate is what enforces it when the model does not listen.
+VARIATION_INSTRUCTION = """Você reescreve uma mensagem de recuperação de venda \
+para WhatsApp, em português do Brasil.
+
+REGRAS ABSOLUTAS:
+- Diga exatamente o que a mensagem original diz. Mude só as palavras.
+- NUNCA acrescente número, valor, preço, quantidade ou porcentagem que não \
+esteja na original.
+- NUNCA acrescente prazo, urgência ou referência a tempo que não esteja na \
+original.
+- NUNCA acrescente link, endereço de site ou domínio.
+- NUNCA acrescente desconto, frete, brinde, garantia ou qualquer promessa.
+- Não use emoji que a original não use.
+- Uma ou duas frases, tom de conversa.
+
+Responda apenas com a mensagem reescrita, sem aspas e sem explicação."""
+
+
+def llm_variator(chat: LlmPort, *, model: str) -> CopyVariator:
+    """The production variator: one model call, no tools, no history.
+
+    Wrapped by `MeteredLlm` at the composition so the cost of anti-ban variation
+    lands in `internal.llm_calls` with its own purpose — R3 of the plan asks for
+    exactly that, because "if it hurts, the variation becomes a pre-generated
+    pool" is a decision that needs a number behind it.
+    """
+
+    async def variate(base: str, *, previous: str | None) -> str:
+        user = f"Mensagem original:\n{base}"
+        if previous:
+            # The "never repeats the last one" rule reaches the model as well as
+            # the gate. The gate is what ENFORCES it; telling the model is what
+            # stops it from being enforced twice and failing.
+            user += (
+                f"\n\nA última mensagem enviada a esta pessoa foi:\n{previous}"
+                "\nEscreva diferente dela."
+            )
+
+        result = await chat.chat(
+            ChatRequest(
+                model=model,
+                messages=(
+                    Message(role="system", content=VARIATION_INSTRUCTION),
+                    Message(role="user", content=user),
+                ),
+            )
+        )
+        return result.text.strip()
+
+    return variate
 
 
 def _fold(text: str) -> str:

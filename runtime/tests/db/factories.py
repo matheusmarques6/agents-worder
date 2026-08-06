@@ -112,9 +112,17 @@ def create_thread(
     tenant_id: uuid.UUID,
     *,
     origin_occasion: str = "direct",
+    # S7: a thread on a SPECIFIC number. Additive — absent still means "make one"
+    # — and it exists because the tier proof needs the proactive and the reactive
+    # to leave by the SAME account, which is the whole claim being made.
+    channel_account_id: uuid.UUID | None = None,
 ) -> Thread:
     contact_id = create_contact(conn, tenant_id)
-    channel = create_channel_account(conn, tenant_id)
+    channel = (
+        ChannelAccount(id=channel_account_id, phone_e164="", external_account_id="")
+        if channel_account_id is not None
+        else create_channel_account(conn, tenant_id)
+    )
 
     with conn.cursor() as cur:
         cur.execute(
