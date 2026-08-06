@@ -93,6 +93,38 @@ docker compose up --build
 
 5. Abra o hub em `http://localhost:3000`.
 
+Se a 3000 estiver ocupada por outro projeto — o compose falha com
+`Bind for 0.0.0.0:3000 failed: port is already allocated` — suba em outra:
+
+```powershell
+$env:HUB_PORT="3001"; docker compose up -d hub
+```
+
+## Rodar as jornadas contra o container
+
+O `playwright.config.ts` sobe os proprios servidores por padrao. Para apontar as
+jornadas para o hub que ja esta de pe no compose, use `HUB_BASE_URL` — nesse modo
+ele nao sobe servidor nenhum:
+
+```powershell
+$env:HUB_BASE_URL="http://127.0.0.1:3001"; pnpm --dir hub exec playwright test e2e/home.spec.ts
+```
+
+**Isso e o que valida a imagem**, e nao o codigo-fonte: a jornada roda contra o
+build que esta dentro do container, nos dois viewports.
+
+Duas ressalvas. A suite completa nao serve para esse alvo — as jornadas da vitrine
+exigem `DESIGN_SHOWCASE` ligado e o teste do 404 exige um segundo servidor sem a
+flag, e o container tem uma configuracao so. E **sem `HUB_BASE_URL`, com a 3000
+ocupada, o `reuseExistingServer` local reusa o servidor do estranho e a suite passa
+a reportar sobre o app errado** — nao rode assim.
+
+Os navegadores do Playwright nao vem no `pnpm install`:
+
+```powershell
+pnpm --dir hub exec playwright install chromium
+```
+
 ## A stack e as suites de teste nao rodam juntas
 
 O container `runtime` consome as mesmas filas do banco local que o nivel

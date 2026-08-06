@@ -10,6 +10,17 @@ import { defineConfig, devices } from "@playwright/test";
 // would silently become the contract everyone else is compared against.
 const isCI = !!process.env.CI;
 
+// A hub that is ALREADY running — the compose container, later a staging
+// deploy — instead of the servers this config starts. Set it and the journeys
+// run against that target and nothing is booted here.
+//
+// Two reasons it exists. The smoke test of E0-23 has to exercise a deployed
+// hub, not a copy built on the spot; and on a machine where :3000 belongs to
+// another project, `reuseExistingServer` would silently point the whole suite
+// at that stranger's app and report on it. CI never sets this — the gate keeps
+// owning its own servers, and the visual baselines with them.
+const externalHub = process.env.HUB_BASE_URL;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -42,7 +53,7 @@ export default defineConfig({
   },
 
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: externalHub ?? "http://127.0.0.1:3000",
     trace: "on-first-retry",
     // Deterministic rendering: no motion, fixed locale and timezone. Without the
     // last two, anything rendering a date or a currency differs per machine.
@@ -69,7 +80,7 @@ export default defineConfig({
   // live. :3001 runs the same build WITHOUT the flag, and exists so "the
   // showcase is not part of production" can be asserted against a real server
   // answering a real request instead of being taken on trust.
-  webServer: [
+  webServer: externalHub ? undefined : [
     {
       command: isCI ? "pnpm start" : "pnpm dev",
       url: "http://127.0.0.1:3000",
