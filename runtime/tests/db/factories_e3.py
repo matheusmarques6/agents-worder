@@ -56,14 +56,27 @@ def create_order(
     financial_status: str = "pending",
     total: str = "199.90",
     currency: str = "BRL",
+    # S9, additive in the shape S3 established for `touches`: callers that do not
+    # care keep the row they always got. The order tools need the two columns
+    # that were only ever written by the mirror (`customer_external_id`, which is
+    # what makes an order somebody's, and the tracking pair), plus an explicit
+    # platform timestamp so "the most recent" can be an assertion rather than a
+    # coincidence of insertion order.
+    customer_external_id: str | None = None,
+    tracking_code: str | None = None,
+    tracking_status: str | None = None,
+    platform_created_ago_seconds: int | None = None,
 ) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
             """
             insert into public.orders
                 (tenant_id, connector_account_id, external_id, financial_status,
-                 total, currency, items)
-            values (%s, %s, %s, %s, %s, %s, %s)
+                 total, currency, items, customer_external_id,
+                 tracking_code, tracking_status, platform_created_at)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    case when %s::integer is null then null
+                         else now() - make_interval(secs => %s::integer) end)
             returning id
             """,
             (
@@ -74,10 +87,31 @@ def create_order(
                 total,
                 currency,
                 psycopg.types.json.Jsonb([{"sku": "A1", "qty": 1}]),
+                customer_external_id,
+                tracking_code,
+                tracking_status,
+                platform_created_ago_seconds,
+                platform_created_ago_seconds,
             ),
         )
         (order_id,) = cur.fetchone()
     return order_id
+
+
+def link_contact_to_customer(
+    conn: psycopg.Connection, contact_id: uuid.UUID, customer_id: uuid.UUID
+) -> None:
+    """`contacts.customer_id` — the one edge that makes an order "this person's".
+
+    A separate function rather than a parameter on `create_thread`: the E1
+    factory may not be edited by a later milestone, and the link is a fact about
+    a contact that already exists, which is exactly how the mirror writes it.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "update public.contacts set customer_id = %s where id = %s",
+            (customer_id, contact_id),
+        )
 
 
 #: The default cadence — kept exactly as S2 wrote it inline, so a test that
