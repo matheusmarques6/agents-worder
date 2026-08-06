@@ -36,9 +36,9 @@ export interface Deps {
   appSecret: string;
   verifyToken: string;
   port: IngestPort;
-  /** Where a 500 — and an off-format payload — gets reported. Injected so a
-   * test can watch it instead of the terminal; production keeps
-   * `console.error`. */
+  /** Where everything unexpected goes — a 500, an off-format payload, a
+   * discarded change. Injected so a test can watch it instead of the terminal;
+   * production keeps `console.error`. */
   onError?: (error: unknown) => void;
 }
 
@@ -46,6 +46,31 @@ export interface Deps {
  * hands in a collector so the terminal stays readable. */
 function report(deps: Deps, error: unknown): void {
   (deps.onError ?? ((thrown: unknown) => console.error("[ingest-meta]", thrown)))(error);
+}
+
+/** What `describeDiscard` needs from a zod failure — structural on purpose, so
+ * the branch decision keeps its one dependency on the schema module and does
+ * not grow a second one on zod itself. */
+interface ParseFailure {
+  issues: ReadonlyArray<{ path: ReadonlyArray<string | number>; code: string }>;
+}
+
+/** The line a dropped change leaves behind: how much was lost and which fields
+ * refused. Paths and codes ONLY — why a change was rejected never needs the
+ * content that was rejected, and message bodies do not leave Postgres. */
+function describeDiscard(value: unknown, failure: ParseFailure): string {
+  const change = (typeof value === "object" && value !== null)
+    ? value as { messages?: unknown; statuses?: unknown }
+    : {};
+  const messages = Array.isArray(change.messages) ? change.messages.length : 0;
+  const statuses = Array.isArray(change.statuses) ? change.statuses.length : 0;
+
+  const refused = failure.issues
+    .map((issue) => `${issue.path.join(".") || "(root)"}=${issue.code}`)
+    .join(", ");
+
+  return `change discarded: ${messages + statuses} entries dropped ` +
+    `(${messages} messages, ${statuses} statuses); refused: ${refused}`;
 }
 
 /** Meta's subscription handshake. */
@@ -90,7 +115,16 @@ export async function handleEvents(request: Request, deps: Deps): Promise<Respon
       if (change.field !== MESSAGES_FIELD) continue;
 
       const parsed = ChangeValue.safeParse(change.value);
-      if (!parsed.success) continue; // strict: what does not validate does not enter
+      if (!parsed.success) {
+        // Strict: what does not validate does not enter — and one invalid entry
+        // fails its whole change, because half a change ingested is worse than
+        // none. But dropping it quietly would make the loss invisible, which is
+        // the failure mode this product hunts hardest: the report says how many
+        // entries went with it and which fields refused, so the gap in the trail
+        // has a line explaining itself.
+        report(deps, new Error(describeDiscard(change.value, parsed.error)));
+        continue;
+      }
 
       const { metadata, messages, statuses } = parsed.data;
       for (const message of messages ?? []) {

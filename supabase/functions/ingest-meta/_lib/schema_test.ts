@@ -131,8 +131,9 @@ Deno.test("a change value without the origin account is refused", () => {
 
 Deno.test("one bad message poisons its whole change", () => {
   // Deliberate: `messages` is an array schema, so a single invalid entry fails
-  // the parse and `handleEvents` skips the change entirely. Partial ingestion
-  // of a change Meta will redeliver is worse than none.
+  // the parse and `handleEvents` skips the change entirely — reporting how much
+  // it dropped. Partial ingestion of a change Meta will redeliver is worse than
+  // none; silent partial loss is worse than both.
   assertFalse(
     ChangeValue.safeParse({
       metadata: { phone_number_id: "1234567890" },

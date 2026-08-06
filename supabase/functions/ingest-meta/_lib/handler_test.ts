@@ -6,7 +6,12 @@
 // wrong is either an event redelivered forever or an event lost in silence, so
 // each branch gets a test that also checks whether the database was touched.
 
-import { assert, assertEquals } from "jsr:@std/assert@1.0.0";
+import {
+  assert,
+  assertEquals,
+  assertFalse,
+  assertStringIncludes,
+} from "jsr:@std/assert@1.0.0";
 
 import { type Deps, handleRequest, type IngestPort } from "./handler.ts";
 import type { InboundMessage } from "./schema.ts";
@@ -279,6 +284,7 @@ Deno.test("a field we do not read is skipped, and the rest still runs", async ()
 
 Deno.test("a change that does not validate is dropped, and the rest still runs", async () => {
   const port = recorder();
+  const errors: unknown[] = [];
   const event = {
     object: "whatsapp_business_account",
     entry: [{
@@ -290,11 +296,62 @@ Deno.test("a change that does not validate is dropped, and the rest still runs",
     }],
   };
 
-  const response = await handleRequest(await signedPost(event), deps(port));
+  const response = await handleRequest(
+    await signedPost(event),
+    deps(port, (error) => errors.push(error)),
+  );
 
   assertEquals(response.status, 200);
   assertEquals(port.ingested.length, 1);
   assertEquals(port.ingested[0].message.id, "wamid.TEXTO");
+  assertEquals(errors.length, 1); // the drop is reported; the good change is not
+});
+
+Deno.test("a discarded change says how much it took with it", async () => {
+  const port = recorder();
+  const errors: unknown[] = [];
+  const event = envelope({
+    // No `metadata`, so the whole change falls — including the entries that
+    // were themselves fine. Conservative on purpose, and now audible.
+    messages: [
+      { id: "wamid.A", from: "5511999998888", type: "text", text: { body: "meu cpf é 000" } },
+      { id: "wamid.B", from: "5511999998888", type: "text", text: { body: "e o pedido?" } },
+    ],
+    statuses: [{ id: "wamid.C", status: "delivered", biz_opaque_callback_data: "outbox-9" }],
+  });
+
+  const response = await handleRequest(
+    await signedPost(event),
+    deps(port, (error) => errors.push(error)),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(port.ingested.length, 0);
+  assertEquals(port.correlated.length, 0);
+  assertEquals(errors.length, 1);
+
+  const reported = String(errors[0]);
+  assertStringIncludes(reported, "3 entries dropped");
+  assertStringIncludes(reported, "(2 messages, 1 statuses)");
+  assertStringIncludes(reported, "metadata="); // which field refused
+  // The reason a change was refused never needs the content that was refused.
+  assertFalse(reported.includes("meu cpf é 000"));
+  assertFalse(reported.includes("5511999998888"));
+});
+
+Deno.test("a change that is not even an object is reported, not crashed on", async () => {
+  const port = recorder();
+  const errors: unknown[] = [];
+
+  const response = await handleRequest(
+    await signedPost(envelope("nada disso")),
+    deps(port, (error) => errors.push(error)),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(port.ingested.length, 0);
+  assertEquals(errors.length, 1);
+  assertStringIncludes(String(errors[0]), "0 entries dropped");
 });
 
 Deno.test("an empty envelope is 200 and touches nothing", async () => {
