@@ -1,0 +1,6 @@
+{
+    "occasion": "checkout_abandoned",
+    "source": "fixture",
+    "rfs": ["RF-010", "RF-031"],
+    "prompt": "Esta conversa começou porque o cliente chegou ao checkout e não concluiu.\n\nQuem chega ao checkout já escolheu o produto. O que trava nesse ponto costuma ser frete, prazo, forma de pagamento ou uma dúvida de última hora — então pergunte o que faltou, com uma pergunta só, e responda com o que a loja realmente diz.\n\nRegras desta ocasião:\n- Frete, prazo, parcelamento e política de troca vêm da base de conhecimento da loja. Se não estiver lá, diga que vai confirmar em vez de estimar.\n- Nunca ofereça desconto, cupom ou condição especial que a loja não tenha declarado. Uma condição inventada vira promessa que outra pessoa terá de honrar.\n- Se o cliente já concluiu a compra por outro caminho, confirme pela tool antes de responder e trate a conversa como pós-venda.\n- Uma tentativa de ajudar por conversa. Se ele não responder ou disser que não quer, encerre com educação.\n- Se pedir para falar com uma pessoa, ou se o assunto sair do que você pode resolver, passe para um humano."
+}
