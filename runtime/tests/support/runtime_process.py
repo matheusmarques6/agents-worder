@@ -46,6 +46,10 @@ class RuntimeProcess:
             "AGENTS_WORKER_SET_ROLE": "worker_role",
             "AGENTS_SENDER_SET_ROLE": "sender_role",
             "AGENTS_CHANNEL": "tests.support.fake_channel:create_channel",
+            # Declared next to the channel, for the same reason: both seams are
+            # the harness's choice, not a default the process invents. A test
+            # that wants another responder overrides it through `extra_env`.
+            "AGENTS_RESPONDER": "tests.support.constant_reply:create_responder",
             "PYTHONPATH": str(RUNTIME_ROOT),
             **TINY_INTERVALS,
             **self._extra_env,
