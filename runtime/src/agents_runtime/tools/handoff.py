@@ -24,6 +24,7 @@ from typing import Any
 
 import psycopg
 
+from agents_runtime.agent_core.llm import ToolSpec
 from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import handoff as handoff_repo
 from agents_runtime.repository.scope import scope_to_tenant
@@ -39,6 +40,29 @@ REASON_LIMIT = 300
 
 class EscalateToHuman:
     name = "escalate_to_human"
+    spec = ToolSpec(
+        name="escalate_to_human",
+        description=(
+            "Passa esta conversa para uma pessoa da loja. Use quando o cliente "
+            "pedir para falar com um humano, ou quando o assunto sair do que "
+            "você pode resolver (reembolso fora da política, reclamação grave, "
+            "problema que exige decisão da loja)."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": (
+                        "Uma linha para quem for assumir: o que o cliente quer e "
+                        "por que precisa de uma pessoa."
+                    ),
+                }
+            },
+            "required": ["reason"],
+            "additionalProperties": False,
+        },
+    )
 
     async def __call__(
         self,

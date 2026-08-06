@@ -18,11 +18,17 @@ import psycopg
 
 from agents_runtime.repository import contacts as contacts_repo
 from agents_runtime.repository.scope import scope_to_tenant
-from agents_runtime.tools.base import ToolContext, ToolResult
+from agents_runtime.tools.base import ToolContext, ToolResult, no_arguments
 
 
 class GetCustomerContext:
     name = "get_customer_context"
+    spec = no_arguments(
+        "get_customer_context",
+        "Consulta quem é o cliente desta conversa: nome, idioma, desde quando "
+        "compra na loja e o histórico de pedidos dele. Não recebe argumentos — "
+        "é sempre o contato desta conversa.",
+    )
 
     async def __call__(
         self,

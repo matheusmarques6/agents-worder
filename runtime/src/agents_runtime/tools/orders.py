@@ -23,6 +23,7 @@ from typing import Any
 
 import psycopg
 
+from agents_runtime.agent_core.llm import ToolSpec
 from agents_runtime.repository import consent as consent_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository.scope import scope_to_tenant
@@ -33,6 +34,30 @@ from agents_runtime.tools.base import ToolContext, ToolResult
 ORDER_ARGUMENT = "order_id"
 
 NOT_OURS = "conversation not found for this tenant"
+
+
+def _order_spec(name: str, description: str) -> ToolSpec:
+    """`order_id` is OPTIONAL, and the description says what leaving it out
+    means. A model that had to supply one would invent one — and an invented
+    order number is a lookup that answers about somebody else's parcel."""
+    return ToolSpec(
+        name=name,
+        description=description,
+        parameters={
+            "type": "object",
+            "properties": {
+                ORDER_ARGUMENT: {
+                    "type": "string",
+                    "description": (
+                        "O número do pedido, como o cliente o informou. Omita "
+                        "para consultar o pedido mais recente dele."
+                    ),
+                }
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+    )
 
 
 def _requested_order_id(arguments: Mapping[str, Any]) -> str | None:
@@ -93,6 +118,11 @@ def _rendered(order: orders_repo.MirroredOrder) -> dict[str, Any]:
 
 class GetOrder:
     name = "get_order"
+    spec = _order_spec(
+        "get_order",
+        "Consulta um pedido deste cliente: situação do pagamento, valor, itens e "
+        "data. Só enxerga pedidos do próprio contato desta conversa.",
+    )
 
     async def __call__(
         self,
@@ -119,6 +149,12 @@ class GetOrder:
 
 class GetTracking:
     name = "get_tracking"
+    spec = _order_spec(
+        "get_tracking",
+        "Consulta o código e o status de rastreio de um pedido deste cliente. "
+        "Devolve vazio quando o pedido existe mas ainda não foi despachado — "
+        "nesse caso, não invente prazo.",
+    )
 
     async def __call__(
         self,

@@ -30,6 +30,7 @@ from uuid import UUID
 
 import psycopg
 
+from agents_runtime.agent_core.llm import ToolSpec
 from agents_runtime.clock import Clock
 from agents_runtime.repository import tool_calls as tool_calls_repo
 from agents_runtime.repository.scope import scope_to_tenant
@@ -51,8 +52,28 @@ class ToolResult:
     error: str | None = None
 
 
+def no_arguments(name: str, description: str) -> ToolSpec:
+    """A tool the model may only ASK FOR, never aim.
+
+    `get_customer_context` and `record_optout` take nothing at all, and that is
+    a security property rather than a simplification: a tool that accepted a
+    contact id is a tool a stranger's message could point somewhere else. The
+    schema says so out loud — `additionalProperties: false` — so the model is
+    told, and the tool ignores whatever arrives anyway.
+    """
+    return ToolSpec(
+        name=name,
+        description=description,
+        parameters={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+
+
 class Tool(Protocol):
     name: str
+    #: What the model is told this tool is. Declared next to the tool rather
+    #: than in the prompt: a description that lived in the prompt would drift
+    #: from the arguments the tool actually parses.
+    spec: ToolSpec
 
     async def __call__(
         self,
