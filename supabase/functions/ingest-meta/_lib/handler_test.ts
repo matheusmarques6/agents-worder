@@ -1,10 +1,10 @@
 // The four branches, and what each one costs.
 //
-// A status code here is a sentence to Meta: 401 "you are not who you say", 400
-// "you are, but that is not a webhook", 500 "our fault, send it again", 200
-// "handled, stop". Getting one wrong is either an event redelivered forever or
-// an event lost in silence, so each branch gets a test that also checks whether
-// the database was touched.
+// A status code here is a sentence to Meta: 401 "you are not who you say", 500
+// "our fault, send it again", 200 "stop sending this" — whether we handled it,
+// ignored it on purpose, or could not parse it and never will. Getting one
+// wrong is either an event redelivered forever or an event lost in silence, so
+// each branch gets a test that also checks whether the database was touched.
 
 import { assert, assertEquals } from "jsr:@std/assert@^1.0.0";
 
@@ -109,33 +109,46 @@ Deno.test("a valid signature over a different body is 401", async () => {
   assertEquals(port.ingested.length, 0);
 });
 
-// --- 400: Meta's error ----------------------------------------------------------
+// --- 200 + a report: Meta's error -------------------------------------------------
+//
+// Nothing is ingested, and the answer is still 200: no redelivery of an
+// unparseable envelope will ever parse, and every non-200 buys days of retries.
 
-Deno.test("a signed body that is not JSON is 400", async () => {
+Deno.test("a signed body that is not JSON is acknowledged, not ingested", async () => {
   const port = recorder();
+  const errors: unknown[] = [];
 
-  const response = await handleRequest(await signedPost("nao é json {"), deps(port));
+  const response = await handleRequest(
+    await signedPost("nao é json {"),
+    deps(port, (error) => errors.push(error)),
+  );
 
-  assertEquals(response.status, 400);
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), { ignored: true, reason: "malformed" });
   assertEquals(port.ingested.length, 0);
+  assertEquals(errors.length, 1); // acknowledged is not the same as unnoticed
 });
 
-Deno.test("a signed body off-format is 400 — no retry will fix it", async () => {
+Deno.test("a signed body off-format is acknowledged, not ingested", async () => {
   const port = recorder();
+  const errors: unknown[] = [];
+  const bodies: unknown[] = [
+    { entry: [] }, // no `object`
+    { object: 1, entry: [] },
+    { object: "whatsapp_business_account", entry: "nada" },
+  ];
 
-  assertEquals((await handleRequest(await signedPost({ entry: [] }), deps(port))).status, 400);
-  assertEquals(
-    (await handleRequest(await signedPost({ object: 1, entry: [] }), deps(port))).status,
-    400,
-  );
-  assertEquals(
-    (await handleRequest(
-      await signedPost({ object: "whatsapp_business_account", entry: "nada" }),
-      deps(port),
-    )).status,
-    400,
-  );
+  for (const body of bodies) {
+    const response = await handleRequest(
+      await signedPost(body),
+      deps(port, (error) => errors.push(error)),
+    );
+    assertEquals(response.status, 200, JSON.stringify(body));
+    assertEquals(await response.json(), { ignored: true, reason: "malformed" });
+  }
+
   assertEquals(port.ingested.length, 0);
+  assertEquals(errors.length, bodies.length);
 });
 
 // --- 500: our error -------------------------------------------------------------
