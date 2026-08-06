@@ -346,7 +346,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | occasion | text CHECK | `pix_pending \| checkout_abandoned \| cart_abandoned` |
 | enabled | boolean DEFAULT true | |
 | channel_preference | text CHECK | `cloud \| evolution \| auto` |
-| touches | jsonb NOT NULL | `[{n, delay, template_ref/copy_base, cta}]` — copy é variada por LLM no envio Evolution |
+| touches | jsonb NOT NULL | `[{n, delay, copy_base[, template_ref, cta]}]` — copy é variada por LLM no envio Evolution. **Sem DEFAULT e com CHECK de forma** (`public.funnel_cadence_is_valid`, E3 · S4): lista não vazia · `n` inteiro positivo e **distinto** · `delay` em ISO-8601 (`PT0S`, `PT24H`, `P1DT6H`) porque `start_funnel_run` o converte direto em `interval` · `copy_base` obrigatório, porque texto é o que todo adaptador entrega hoje e uma entrada que só nomeia template é um toque que ninguém consegue enviar. Cadência vazia deixou de ser no-op silencioso: `enabled` é o interruptor |
 | max_touches | integer DEFAULT 4 | teto da cadência **deste funil**, não limite por contato — os limites por contato são da escada (RF-034) e vivem em `tenants.proactive_max_per_contact_24h` |
 | created_at / updated_at | timestamptz | **índice único parcial (tenant_id, occasion) WHERE enabled** (nota 8): `start_funnel_run` pergunta "esta ocasião tem funil habilitado?" e duas respostas não são configuração, são sorteio |
 
@@ -366,6 +366,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | cancel_reason | text nullable | **o vocabulário é o da escada** (`agents_runtime.dispatch.ladder.DENIAL_REASONS`): `suppressed_block \| suppressed_silence \| suppressed_optout \| quota_exceeded \| stale_newer_message \| stale_order_paid \| rate_limit_24h \| funnel_cooldown_72h \| channel_paused_tier`, mais `manual` (cancelamento por operador, que a escada não produz). Os quatro valores antigos (`replied \| paid \| suppressed \| manual`) não cabiam os nove motivos, e achatá-los apagaria a métrica "toques cancelados **por motivo**" — que é a que diagnostica um funil |
 | sent_at | timestamptz nullable | instante em que o toque foi **comprometido na outbox** (a entrega acontece depois, no sender). É o que a janela de 72h entre funis distintos mede |
 | outbox_id | uuid FK → message_outbox nullable | ON DELETE SET NULL — drenar a outbox não pode apagar o fato de que um contato foi tocado |
+| claimed_by / claimed_at | uuid / timestamptz nullable | quem reivindicou o toque na varredura de 1 min (`internal.claim_due_touches`) e quando. Existem para diagnóstico: toque parado em `enqueued` é o modo de falha deste passo, e "qual passe o pegou, a que horas" é a investigação inteira |
 | created_at | timestamptz | CHECKs de estado inteiro: `(status='sent') = (sent_at IS NOT NULL)` e `(status='cancelled') = (cancel_reason IS NOT NULL)` (nota 9) |
 
 ### 5.6 `funnel_conversions` — receita recuperada como fato gravado (E3 · D8)
