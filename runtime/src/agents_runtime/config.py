@@ -58,6 +58,16 @@ class QueueingConfig:
     # FATO gravado, não a proteção.
     silence_sweep_tick: timedelta = timedelta(minutes=15)
 
+    # A reconciliação por poll (ADR-3, E3 S8). DOIS números, e a distinção
+    # importa: `reconcile_stale_after` é a PROMESSA — nenhuma loja fica mais de
+    # quinze minutos sem alguém perguntar a ela — e `reconcile_tick` é a
+    # frequência com que a varredura verifica essa promessa. Iguais, a promessa
+    # viraria trinta minutos: um tique que chega um segundo antes de a loja
+    # vencer não a pega, e a próxima chance é um tique inteiro depois. É a mesma
+    # leitura de `dispatcher_tick` contra `due_at`.
+    reconcile_tick: timedelta = timedelta(minutes=5)
+    reconcile_stale_after: timedelta = timedelta(minutes=15)
+
     # A escada da arquitetura: 30s, 2min, 8min… O teto não morde nos limites
     # atuais (cinco tentativas param em ~34 min); existe para o dia em que um
     # limite subir sem ninguém reler esta conta.
@@ -130,6 +140,8 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
         coalescer_tick=_ms("AGENTS_COALESCER_TICK_MS", base.coalescer_tick),
         dispatcher_tick=_ms("AGENTS_DISPATCHER_TICK_MS", base.dispatcher_tick),
         silence_sweep_tick=_ms("AGENTS_SILENCE_TICK_MS", base.silence_sweep_tick),
+        reconcile_tick=_ms("AGENTS_RECONCILE_TICK_MS", base.reconcile_tick),
+        reconcile_stale_after=_ms("AGENTS_RECONCILE_STALE_MS", base.reconcile_stale_after),
         busy_retry=_ms("AGENTS_BUSY_RETRY_MS", base.busy_retry),
         idle_pause=_ms("AGENTS_IDLE_PAUSE_MS", base.idle_pause),
         sender_poll=_ms("AGENTS_SENDER_POLL_MS", base.sender_poll),

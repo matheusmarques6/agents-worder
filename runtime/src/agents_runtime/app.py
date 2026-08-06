@@ -26,6 +26,8 @@ from agents_runtime.agent_core.review import Reviewer
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.connectors.port import ConnectorPort
+from agents_runtime.connectors.reconcile import reconcile_pass
 from agents_runtime.dispatch.variation import CopyVariator
 from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
 from agents_runtime.queueing.dispatcher import dispatch_pass, run_touch
@@ -141,12 +143,17 @@ async def run(
     respond: Responder | None = None,
     review: Reviewer | None = None,
     channel: ChannelPort | None = None,
+    connectors: Mapping[str, ConnectorPort] | None = None,
     variator: CopyVariator | None = None,
     extra_handlers: Mapping[str, Handler] | None = None,
     process_name: str = APPLICATION_NAME,
     workers: int = 2,
     worker_set_role: str | None = None,
     sender_set_role: str | None = None,
+    # A third role, and not for symmetry: the reconciliation calls
+    # `ingest_webhook`, so it holds the ingestion's own credentials rather than
+    # the worker's. See the grants in `20260806000010_reconciliation.sql`.
+    reconcile_set_role: str | None = None,
 ) -> None:
     config = config or QueueingConfig()
     clock = clock or SystemClock()
@@ -258,6 +265,34 @@ async def run(
                 await _sleep_or_stop(clock, stop, config.silence_sweep_tick.total_seconds())
 
         tasks.append(asyncio.create_task(silence(), name="silence-sweep"))
+
+        # -- the reconciliation sweep (ADR-3, S8): the poll that catches what a
+        # webhook lost. Only when adapters exist, the same doctrine as the
+        # channel and the opposite of a default: a sweep with nothing to poll
+        # would claim every store every tick, mark them `syncing`, close them
+        # `error`, and turn "no adapter configured" into a hub full of red.
+        #
+        # Its own connection, like the dispatcher's and the silence sweep's,
+        # and here the reason is stronger than theirs: this sweep is the
+        # INGESTION, not worker work. It calls `ingest_webhook`, and whoever can
+        # call that holds the key to writing across every tenant — so it gets
+        # `ingestion_role` and the workers never do. Sharing the worker's pool
+        # would have been shorter and would have handed that key to every LLM
+        # turn in the process.
+        if connectors:
+            reconcile_conn = await _connect(dsn, reconcile_set_role)
+            connections.append(reconcile_conn)
+
+            async def reconcile() -> None:
+                while not stop.is_set():
+                    await reconcile_pass(
+                        reconcile_conn,
+                        connectors,
+                        stale_after=config.reconcile_stale_after,
+                    )
+                    await _sleep_or_stop(clock, stop, config.reconcile_tick.total_seconds())
+
+            tasks.append(asyncio.create_task(reconcile(), name="reconcile-sweep"))
 
         # -- workers: one connection and one loop each, so a slow turn on one
         # never blocks a claim on another (and cenários B get real concurrency).

@@ -14,7 +14,7 @@ takes one page, and the store whose history is longer than a page comes back
 next tick — from a cursor that only ever moved as far as an ingested event.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from agents_runtime.connectors.port import PlatformEvent, SyncTarget
 
@@ -27,6 +27,7 @@ class ScriptedConnector:
         events: Sequence[PlatformEvent],
         *,
         fail_after: int | None = None,
+        on_fetch: Callable[[SyncTarget], None] | None = None,
     ) -> None:
         self._events = sorted(events, key=lambda event: event.occurred_at)
         #: How many pages this platform hands over before it stops answering.
@@ -35,9 +36,16 @@ class ScriptedConnector:
         #: Every target this connector was asked about, in order — what proves
         #: a tick polled the accounts it claimed to poll.
         self.calls: list[SyncTarget] = []
+        #: Runs when the platform is asked, which is AFTER the claim and BEFORE
+        #: the first ingestion. That window is the only place a test can stand
+        #: to change the world under a sweep in flight — a merchant
+        #: disconnecting a store while it is being reconciled.
+        self._on_fetch = on_fetch
 
     async def fetch_since(self, target: SyncTarget, *, limit: int) -> Sequence[PlatformEvent]:
         self.calls.append(target)
+        if self._on_fetch is not None:
+            self._on_fetch(target)
         if self.fail_after is not None:
             if self.fail_after <= 0:
                 raise ConnectionError("HTTP 503 scripted connector told to fail")
