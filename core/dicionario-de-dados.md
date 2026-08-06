@@ -379,7 +379,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | contact_id | uuid FK nullable | ON DELETE SET NULL — a purga por contato corta a pessoa e deixa o dinheiro, que é o que a LGPD pede |
 | scheduled_touch_id | uuid FK nullable | ON DELETE SET NULL — qual toque levou à conversão |
 | order_id | uuid FK nullable | **UNIQUE** — um pagamento credita um funil só; duas linhas dobrariam o único número pelo qual o lojista compra o produto |
-| amount | numeric(12,2) NOT NULL | copiado, não juntado: o pedido pode sumir e o valor não pode |
+| amount | numeric(12,2) **nullable**, CHECK `>= 0` | copiado, não juntado: o pedido pode sumir e o valor não pode. **NULL tem significado declarado — "recuperado, valor desconhecido"** (a plataforma não informou o total). Nasceu `NOT NULL` no S2 e foi afrouxado no S5: obrigar um valor forçava `coalesce(total, 0)`, e "recuperei uma venda de valor desconhecido" virava "recuperei R$ 0,00" — duas frases diferentes que viram a mesma dentro de um `sum()`, para sempre. Com NULL a soma ignora o que não sabe e a contagem continua contando o fato |
 | currency | text NOT NULL DEFAULT 'BRL' | ISO-4217 (CHECK) |
 | attributed_at | timestamptz NOT NULL DEFAULT now() | pedido pago dentro de `tenants.attribution_window_hours` depois de um toque enviado |
 | created_at | timestamptz | |

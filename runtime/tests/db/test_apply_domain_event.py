@@ -123,7 +123,7 @@ def test_an_unsupported_event_type_is_discarded(
     #
     # Regra adotada no marco a partir daqui: **exemplo de caso negativo nunca é
     # o caso positivo do passo seguinte.** `theme_published` é um tópico real da
-    # Shopify e não está na fila de nenhum passo do E0–E8 — nada neste produto
+    # Shopify e não está na fila de nenhum passo do E0 ao E8 — nada neste produto
     # vai reagir a um tema publicado.
     event_id = abandonment(admin, two_tenants.a.id, event_type="theme_published")
 

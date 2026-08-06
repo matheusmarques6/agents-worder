@@ -66,19 +66,22 @@ def number(admin: psycopg.Connection, two_tenants: TwoTenants) -> ChannelAccount
 def an_order(
     *,
     external_id: str | None = None,
-    total: str = "199.90",
+    total: str | None = "199.90",
     currency: str = "BRL",
     customer_external_id: str | None = None,
     customer_phone: str | None = None,
 ) -> dict:
+    """`total=None` omite a chave — é a plataforma que manda o pagamento sem
+    dizer quanto, que existe e é o caso do `amount` nullable."""
     order = {
         "external_id": external_id or unique_id("ord"),
-        "total": total,
         "currency": currency,
         "status": "unfulfilled",
         "items": [{"sku": "A1", "qty": 2}],
         "tracking_code": "BR123",
     }
+    if total is not None:
+        order["total"] = total
     if customer_external_id is not None:
         order["customer"] = {
             "external_id": customer_external_id,
@@ -508,6 +511,33 @@ def test_a_touch_sent_inside_the_window_credits_the_conversion(
     # O instante do PAGAMENTO, não o do processamento: um evento drenado depois
     # de uma queda credita a receita no dia em que o dinheiro entrou.
     assert attributed_at == paid_at
+
+
+def test_an_order_with_no_total_credits_the_conversion_without_inventing_a_zero(
+    admin: psycopg.Connection, two_tenants: TwoTenants, store: ConnectorAccount
+) -> None:
+    """Conversão sem valor conhecido é NULL, nunca zero.
+
+    Defeito do S2, corrigido com autorização: `amount NOT NULL` obrigava o
+    handler a um `coalesce(total, 0)`, e isso transforma "recuperei uma venda de
+    valor desconhecido" em "recuperei R$ 0,00" — duas frases diferentes que
+    viram a mesma dentro de um `sum()`, para sempre. NULL preserva a distinção e
+    faz a soma ignorar o que ela não sabe; o fato da conversão continua gravado,
+    que é o que a métrica de "quantas vendas o funil recuperou" precisa.
+    """
+    phone = unique_phone()
+    _a_contact_who_was_touched(admin, two_tenants.a.id, phone=phone, sent_ago=timedelta(hours=2))
+
+    apply_event(
+        admin,
+        a_payment(admin, two_tenants.a.id, store, phone=phone, order=an_order(total=None)),
+    )
+
+    rows = conversions_of(admin, two_tenants.a.id)
+    assert len(rows) == 1
+    assert rows[0][4] is None
+    # E o espelho concorda: o pedido também não inventou um total.
+    assert orders_of(admin, two_tenants.a.id)[0][2] is None
 
 
 def test_a_touch_sent_before_the_window_credits_nothing(
