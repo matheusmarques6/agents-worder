@@ -63,5 +63,25 @@ class GetCustomerContext:
                     facts.last_message_at.isoformat() if facts.last_message_at else None
                 ),
                 "conversations": facts.conversations,
+                "orders": _history(facts.orders),
             },
         )
+
+
+def _history(orders: contacts_repo.OrderHistory | None) -> dict[str, Any] | None:
+    """`null` when this contact was never linked to a store customer.
+
+    Not `{"total": 0}` — that is a DIFFERENT customer, one the store knows and
+    who has bought nothing, and the prompt says something different about each
+    (decisão 81b). Money is text for the same reason it is everywhere else here.
+    """
+    if orders is None:
+        return None
+
+    return {
+        "total": orders.total_orders,
+        "avg_ticket": None if orders.avg_ticket is None else f"{orders.avg_ticket:.2f}",
+        "first_order_at": (
+            orders.first_order_at.date().isoformat() if orders.first_order_at else None
+        ),
+    }

@@ -15,7 +15,9 @@ Lives under `tests/` because a double never ships in the runtime image
 import itertools
 from collections.abc import Sequence
 
-from agents_runtime.agent_core.llm import ChatRequest, ChatResult, ToolCall, Usage
+from agents_runtime.agent_core.llm import ChatRequest, ChatResult, EmbeddingResult, ToolCall, Usage
+from agents_runtime.judges.pre_send import JUDGE_MODEL
+from tests.support.llm import EmbeddingStandIn, ScriptedLlm
 
 
 class Demand:
@@ -39,8 +41,15 @@ class ToolCallingLlm:
         self._script = list(script)
         self.asked: list[ChatRequest] = []
         self._ids = itertools.count(1)
+        #: Judge 1 is a different model on the same port, exactly as in
+        #: production. Its turns are delegated and NOT counted in `asked`: a
+        #: ceiling assertion counting judge calls would count the wrong thing.
+        self._judge = ScriptedLlm()
 
     async def chat(self, request: ChatRequest) -> ChatResult:
+        if request.model == JUDGE_MODEL:
+            return await self._judge.chat(request)
+
         turn = self._script[min(len(self.asked), len(self._script) - 1)]
         self.asked.append(request)
 
@@ -68,3 +77,6 @@ class ToolCallingLlm:
             model="stand-in/tool-calling",
             tool_calls=calls,
         )
+
+    async def embed(self, texts: Sequence[str], *, model: str) -> EmbeddingResult:
+        return await EmbeddingStandIn().embed(texts, model=model)

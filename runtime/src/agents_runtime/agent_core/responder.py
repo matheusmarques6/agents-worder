@@ -18,14 +18,29 @@ dentro do responder, não só no motor.
 nota de cada tentativa e o alerta do não-envio são gravados por este arquivo —
 não pelo chamador, que poderia esquecer.
 
-O que NÃO existe no E2, declarado: `get_customer_context` (S7) não tem
-consumidor aqui porque a camada `customer_context` do RF-010 fala de PEDIDOS, e
-o espelho de pedidos chega no E3 — inventar um "cliente sem histórico" para
-quem já conversou três vezes seria pior que a ausência (decisão 86d).
+**O laço de escolha (E3 S9).** A resposta do agente deixa de ser uma ida ao
+modelo e passa a ser `tool_loop.converse` — com teto explícito. O que muda aqui
+é só quem chama; o portão, o rastro e a conclusão continuam onde estavam.
+
+E a divisão que o laço obriga a declarar:
+
+  * **contexto incondicional** (`search_knowledge`, `get_customer_context`) é
+    buscado ANTES de gerar e entra no prompt. Oferecê-lo ao modelo seria vender
+    uma ida e volta — segundos numa conversa de WhatsApp — por um texto que ele
+    já pode ler;
+  * **escolha** é o resto: qual pedido, cadê a encomenda, isto precisa de gente.
+    Pergunta que o prompt não tem como responder de antemão.
+
+`get_customer_context` (S7 do E2) ganha aqui o consumidor que lhe faltava — a
+decisão 88b dizia que a camada `customer_context` do RF-010 fala de PEDIDOS e o
+espelho só chegava no E3. Chegou. E o consumidor é a TOOL, via `run_tool`, não
+uma leitura silenciosa do repositório: "o agente consultou quem era" é linha em
+`tool_calls` como qualquer outra consulta.
 """
 
 import os
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import date
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -35,10 +50,11 @@ import psycopg
 
 import agents_runtime
 from agents_runtime.agent_core import openrouter
-from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
+from agents_runtime.agent_core.llm import LlmPort, Message
 from agents_runtime.agent_core.metering import CallRecord, MeteredLlm
-from agents_runtime.agent_core.prompt import compose, render
+from agents_runtime.agent_core.prompt import CustomerContext, compose, render
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
+from agents_runtime.agent_core.tool_loop import converse
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.judges.pre_send import (
@@ -53,8 +69,10 @@ from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository.scope import scope_to_tenant
-from agents_runtime.tools.base import ToolContext, run_tool
+from agents_runtime.tools.base import Tool, ToolContext, run_tool
+from agents_runtime.tools.customer import GetCustomerContext
 from agents_runtime.tools.knowledge import SearchKnowledge
+from agents_runtime.tools.registry import build_toolset
 
 #: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
 #: `None` significa "conclua o turno e não envie nada" (S8).
@@ -72,6 +90,13 @@ TRANSCRIPT_LIMIT = 20
 
 #: Variável de ambiente que sobrescreve de onde as rubricas do Judge 1 são lidas.
 RUBRICS_DIRECTORY_VARIABLE = "AGENTS_RUBRICS_DIR"
+
+#: Tools buscadas antes de gerar, cuja resposta já vai no prompt — e que por
+#: isso NÃO são oferecidas ao modelo. Oferecer as duas seria cobrar uma ida e
+#: volta por um texto que ele já tem à frente. É a emenda do E2 fechada pelos
+#: dois lados: a tool que o modelo ESCOLHE é a que o prompt não podia responder
+#: de antemão.
+PREFETCHED = ("search_knowledge", "get_customer_context")
 
 
 def fixed_responder(text: str = FIXED_REPLY):
@@ -165,6 +190,14 @@ def build_responder(
 
             metered = partial(_metered, conn, job, llm, clock)
             gate = should_think(pending)
+            scope = ToolContext(tenant_id=job.tenant_id, conversation_id=job.conversation_id)
+
+            async def run(tool: Tool, arguments: Any) -> Any:
+                """Como o laço alcança uma tool: `run_tool` já amarrado à
+                conexão, ao escopo e ao relógio. O laço nunca vê nenhum dos
+                três — e, principalmente, o escopo vem do job, nunca dos
+                argumentos que o modelo escreveu."""
+                return await run_tool(conn, tool, scope, arguments, clock=clock)
 
             knowledge = await _knowledge(
                 conn,
@@ -175,11 +208,26 @@ def build_responder(
                 clock,
                 knowledge_limit,
             )
+            customer = await _customer(run, version.config.enabled_tools)
 
             system = render(
-                compose(version.config, settings.policy, state.view, knowledge=knowledge)
+                compose(
+                    version.config,
+                    settings.policy,
+                    state.view,
+                    customer=customer,
+                    knowledge=knowledge,
+                )
             )
             conversation = _as_chat(transcript)
+
+            toolset = {
+                name: tool
+                for name, tool in build_toolset(
+                    version.config.enabled_tools, embedder=metered("embedding")
+                ).items()
+                if name not in PREFETCHED
+            }
 
             chat = metered("agent_reply")
             judge = PreSendJudge(metered("judge_pre"), rubrics)
@@ -203,14 +251,19 @@ def build_responder(
                             ),
                         )
                     )
-                answer = await chat.chat(
-                    ChatRequest(
-                        model=version.config.model,
-                        messages=tuple(messages),
-                        think=gate.think,
-                    )
+                # O laço, não uma ida só. Uma reprovação do Judge 1 refaz o
+                # laço inteiro, e as tools que ele pode ter executado são
+                # idempotentes de propósito (`already`) — regenerar não
+                # suprime duas vezes nem enfileira o mesmo cliente duas vezes.
+                outcome = await converse(
+                    chat,
+                    model=version.config.model,
+                    messages=messages,
+                    toolset=toolset,
+                    run=run,
+                    think=gate.think,
                 )
-                return answer.text
+                return outcome.text
 
             outcome = await guarded_reply(generate, judge, context=context)
 
@@ -303,6 +356,38 @@ def _recorder(conn: psycopg.AsyncConnection, tenant_id: UUID, conversation_id: U
             )
 
     return record
+
+
+async def _customer(run, enabled_tools: tuple[str, ...]) -> CustomerContext | None:
+    """A camada `customer_context` do RF-010, buscada antes de gerar.
+
+    Pela TOOL, não por uma leitura direta do repositório: a consulta fica em
+    `internal.tool_calls` como qualquer outra, e o dia em que ela falhar (banco
+    lento, cliente não espelhado) o merchant consegue ver que o agente tentou.
+
+    `None` quando o tenant não habilitou a tool, quando a conversa não é dele,
+    ou quando o contato nunca foi ligado a um cliente da loja. Os três dão na
+    mesma coisa para o prompt — nenhuma camada —, e isso é deliberado: a
+    alternativa é escrever "cliente sem histórico" para quem talvez seja o
+    melhor cliente da loja (decisão 81b).
+    """
+    if "get_customer_context" not in enabled_tools:
+        return None
+
+    result = await run(GetCustomerContext(), {})
+    if not result.success:
+        return None
+
+    orders = result.output.get("orders")
+    if orders is None:
+        return None
+
+    first_order = orders.get("first_order_at")
+    return CustomerContext(
+        total_orders=orders["total"],
+        avg_ticket=orders.get("avg_ticket"),
+        first_order_at=date.fromisoformat(first_order) if first_order else None,
+    )
 
 
 async def _knowledge(
