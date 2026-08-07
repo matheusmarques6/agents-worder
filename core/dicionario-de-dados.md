@@ -167,8 +167,10 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | platform | text CHECK | `shopify \| nuvemshop \| yampi` |
 | source_account_id | text NOT NULL | id da loja na plataforma — **é a chave que resolve o tenant na ingestão**; UNIQUE (platform, source_account_id) |
 | vault_secret_id | uuid | OAuth — lido só via `get_connector_secret()` |
-| sync_status | text CHECK | `ok \| syncing \| error` |
-| last_sync_at | timestamptz | |
+| sync_status | text CHECK | `ok \| syncing \| error` — escrito só por `finish_sync()` (`syncing` é do claim) |
+| last_sync_at | timestamptz | **quando PERGUNTAMOS**, não "quando deu certo" — avança inclusive nos passes que falham |
+| sync_cursor_at | timestamptz | instante do último evento efetivamente ingerido por poll; só avança (E3 · S8) |
+| sync_error_since | timestamptz | início da sequência **ininterrupta** de passes com `error`; NULL = o último terminou bem. É o que mede persistência: `last_sync_at` não serve, porque a loja que falha de cinco em cinco minutos o mantém eternamente fresco (E3 · S11) |
 | webhooks_registered | boolean DEFAULT false | |
 | created_at | timestamptz | |
 
@@ -318,9 +320,9 @@ Toda inserção grava também `audit_log` (`suppression.<reason>`, alvo `contact
 ### 5.2 Filas pgmq **[interna]** — payloads canônicos
 | Fila | Payload | Observação |
 |---|---|---|
-| q_inbound | `{conversation_id, generation, target_seq}` | criado SÓ pelo coalescer, em transação única |
-| q_domain_events | `{webhook_event_id}` | abandono, pagamento, status |
-| q_scheduled | `{scheduled_touch_id}` | toques vencidos |
+| q_inbound | `{conversation_id, generation, target_seq, tenant_id, otel?}` | criado SÓ pelo coalescer, em transação única |
+| q_domain_events | `{webhook_event_id, otel?}` | abandono, pagamento, status. O `otel` chega por `ingest_webhook(p_otel)` — é como o passe de reconciliação (D5) fica no mesmo trace do job que ele causa (E3 · S11) |
+| q_scheduled | `{scheduled_touch_id, tenant_id, otel?}` | toques vencidos; o `otel` é o contexto do tique da varredura (E3 · S11) |
 | q_evals | `{kind, conversation_id? , eval_run_id?}` | melhor esforço |
 | *_dlq (4) | mensagem original + `{error_class, last_error, failed_at}` | alerta + reprocesso manual |
 
@@ -455,12 +457,39 @@ Toda inserção grava também `audit_log` (`suppression.<reason>`, alvo `contact
 |---|---|---|
 | id | uuid PK | |
 | tenant_id | uuid FK nullable | null = alerta de plataforma |
-| type | text CHECK | `critical_violation \| queue_depth \| queue_age \| dlq \| outbox_unknown \| outbox_review \| meta_tier \| connector_error \| lease_expired` |
+| type | text CHECK | `critical_violation \| queue_depth \| queue_age \| dlq \| outbox_unknown \| outbox_review \| meta_tier \| connector_error \| lease_expired \| handoff \| touch_stuck \| channel_banned` |
 | severity | text CHECK | `info \| warning \| critical` |
 | title | text | |
-| payload | jsonb | contexto para investigar |
+| payload | jsonb | contexto para investigar — **ids, contadores e idades; nunca PII** (nem telefone, nem nome, nem conteúdo): um alerta é lido fora do Postgres |
 | status | text CHECK | `open \| acknowledged \| resolved` |
 | created_at / resolved_at | timestamptz | |
+
+**Quem escreve cada tipo** (E3 · S11 — *guarda sem alvo mente*: tipo de alerta sem escritor é proteção decorativa):
+
+| type | Escritor | Quando |
+|---|---|---|
+| `critical_violation` | Judge 1 (E2 · S8) e o validador de copy (E3 · S7) | um rascunho reprovado nunca saiu |
+| `handoff` | `escalate_to_human` (E3 · S9) | o agente saiu e uma pessoa é esperada |
+| `meta_tier` | `internal.record_channel_send()` (E3 · S7) | **na travessia** dos 80% do tier (RF-035) — um por travessia, não por envio |
+| `touch_stuck` | `internal.sweep_health_alerts()` (E3 · S11) | toque em `enqueued` além de `touch_stuck_after`: o job morreu e `claim_due_touches` só olha `pending`. **Alerta de idade, nunca um segundo relógio** — devolver o toque para `pending` poderia reenviar o que já saiu |
+| `channel_banned` | idem | `channels_accounts.status = 'banned'`. **Sem escritor automático do estado ainda**: hoje quem o marca é operação/hub (E5/E6); a detecção pelo provedor é pergunta da suíte `contract` da Evolution |
+| `connector_error` | idem | `sync_status = 'error'` há mais de `sync_error_after` (mede-se por `sync_error_since`) |
+| `queue_depth` · `queue_age` · `dlq` · `outbox_unknown` · `outbox_review` · `lease_expired` | **sem escritor** | dependem do exportador OTLP (Logfire/Grafana, pendências B-2/B-3) ou de trabalho do E6 |
+
+Todos os alertas de varredura **deduplicam por alerta ABERTO equivalente**: uma linha por tique seria, num dia ruim, mais alertas do que alguém lê — a mesma doença com outro sintoma. Resolvido sem conserto, o próximo tique avisa de novo.
+
+### 6.6 Views de métrica (E3 · S11) — o fato consultável, sem consulta inventada
+
+`public`, todas com `security_invoker = true` para que a RLS da tabela por baixo valha sem nenhum `WHERE tenant_id` escrito à mão. Nenhuma expõe telefone, nome ou conteúdo.
+
+| View | Grão | Para quê |
+|---|---|---|
+| `metrics_touches` | tenant · funil · ocasião · dia UTC · status · **`cancel_reason`** | toques agendados/enviados/cancelados **por motivo**. O motivo é o eixo: um total de cancelados não distingue "o contato respondeu" (o funil funcionou) de "o número está pausado no tier" (o produto quebrou) |
+| `metrics_stuck_touches` | linha | quais toques estão presos em `enqueued`, e há quanto tempo — o detalhe do alerta `touch_stuck`. Só leitura |
+| `metrics_conversions` | tenant · funil · dia UTC · **moeda** | receita recuperada. A moeda agrupa: somar duas produz um número que não é dinheiro nenhum |
+| `metrics_channel_health` | conta de canal | uso do tier (fração pronta, NULL quando não há tier), estágio de warm-up, teto do dia, ritmo. `authenticated` recebe GRANT **por coluna** em `channels_accounts`, para que `phone_e164`, `external_account_id` e `vault_secret_id` não cheguem à Data API |
+
+Fora daqui, e é dito: profundidade de fila e da DLQ é estado do pgmq, mora em `internal` (ADR-11) e o consumidor natural é o exportador OTLP — que depende de B-2/B-3.
 
 ---
 
