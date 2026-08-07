@@ -6,9 +6,11 @@
 # §10, R4). If it ever stops fitting, what leaves the PR is what already runs
 # on `main` — never the `rls` suite.
 #
-# The four jobs are independent and run in parallel; each one is also the place
+# The jobs are independent and run in parallel; each one is also the place
 # a specific sabotage has to fail (plano §E0-12):
 #   boundaries -> N1   tests-py -> N2 and N4   tests-hub -> N3, from E0-18 on.
+# `edge-tests` joined in E3-P2: the ingestion door runs on Deno, so it is the
+# one piece of production code neither pytest nor Playwright can reach.
 
 name: pr
 
@@ -110,6 +112,26 @@ jobs:
       # `rls` leak suite, which is blocking from the very first PR
       # (core/testes-e-cicd.md §3.2).
       - run: uv run --directory runtime pytest -m "unit or db"
+
+  # The Edge Function's own level. It needs no Postgres and no browser — the
+  # signature, the strict schema and the branch decision are pure, and the one
+  # side effect sits behind `IngestPort`, which the suite implements with an
+  # array. Seconds, not minutes.
+  edge-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # `deno test` type-checks what it runs, so a `_lib/` signature that drifts
+      # from its caller fails here. `index.ts` itself is not reached: it opens a
+      # database connection at import time, which is exactly why the parts moved
+      # out of it.
+      - run: deno test supabase/functions/ingest-meta/
 
   tests-hub:
     runs-on: ubuntu-latest

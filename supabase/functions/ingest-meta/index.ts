@@ -16,9 +16,16 @@
 // `internal` está fora da Data API por construção — não existe RPC para ele).
 // O LOGIN do papel é concedido fora de banda, por ambiente (decisão 14), e a
 // credencial chega por secret. Sem secret, a função falha FECHADA.
+//
+// This file is the HTTP seam and nothing else: environment, a database handle,
+// and the adapter that turns the handler's two decisions into two SQL calls.
+// The boundaries above live in `_lib/` — signature, schema, branch decision —
+// where `deno test` can reach them.
 
 import postgres from "npm:postgres@3.4.5";
-import { z } from "npm:zod@3.23.8";
+
+import { type Deps, handleRequest, type IngestPort } from "./_lib/handler.ts";
+import { messageContent } from "./_lib/payload.ts";
 
 // --- ambiente (fail closed: sem segredo, sem serviço) -------------------------
 
@@ -36,198 +43,35 @@ const sql = postgres(required("INGESTION_DB_URL"), {
   prepare: false, // pooler em modo transação não suporta prepared statements
 });
 
-// --- assinatura ---------------------------------------------------------------
+// --- the adapter ----------------------------------------------------------------
 
-const encoder = new TextEncoder();
+const port: IngestPort = {
+  async ingestMessage(phoneNumberId, message) {
+    await sql`
+      select * from internal.ingest_webhook(
+        'meta',
+        ${phoneNumberId},
+        ${message.id},
+        'message_inbound',
+        ${sql.json(messageContent(message))}
+      )
+    `;
+    // `unknown_account` e `duplicate` são desfechos, não erros: a função decidiu,
+    // o evento tem rastro (ou deliberadamente não tem), e a Meta recebe 200 para
+    // não reentregar eternamente o que nunca vai mudar de resultado.
+  },
 
-async function signatureIsValid(rawBody: string, header: string | null): Promise<boolean> {
-  if (!header || !header.startsWith("sha256=")) return false;
+  async correlateStatus(correlation) {
+    await sql`
+      select internal.correlate_outbox_status(
+        ${correlation.opaqueData},
+        ${correlation.status},
+        ${correlation.wamid}
+      )
+    `;
+  },
+};
 
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(APP_SECRET),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
-  const expected = Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+const deps: Deps = { appSecret: APP_SECRET, verifyToken: VERIFY_TOKEN, port };
 
-  // Comparação em tempo constante: um comparador que desiste no primeiro byte
-  // diferente vaza, byte a byte, quanto da assinatura o atacante acertou.
-  const given = header.slice("sha256=".length);
-  if (given.length !== expected.length) return false;
-  let diff = 0;
-  for (let index = 0; index < expected.length; index++) {
-    diff |= given.charCodeAt(index) ^ expected.charCodeAt(index);
-  }
-  return diff === 0;
-}
-
-// --- o schema estrito ----------------------------------------------------------
-// Só o que a ingestão consome. Todo o resto do payload gigante da Meta é
-// descartado na entrada — o bruto que a plataforma guarda é o que a função SQL
-// recebe como `p_payload`, e ELE é montado aqui, não copiado às cegas.
-
-// A resposta de botão (RF-033a). É transporte, não regra: a ingestão carrega o
-// `id` que NÓS emitimos e nada mais — quem o reconhece é
-// `agents_runtime.dispatch.consent`, determinístico, no turno de entrada. Sem
-// estas quatro linhas o toque na Bloquear chegaria como uma mensagem de tipo
-// `interactive` sem texto, e o consentimento do contato sumiria na entrada.
-const ButtonReply = z.object({
-  id: z.string().min(1),
-  title: z.string().optional(),
-});
-
-const InboundMessage = z.object({
-  id: z.string().min(1), // wamid — a chave natural do evento
-  from: z.string().regex(/^\d{8,15}$/), // dígitos, sem '+': a Meta manda assim
-  timestamp: z.string().optional(),
-  type: z.string(),
-  text: z.object({ body: z.string() }).optional(),
-  interactive: z
-    .object({
-      type: z.string(),
-      button_reply: ButtonReply.optional(),
-    })
-    .optional(),
-});
-
-const StatusUpdate = z.object({
-  id: z.string().min(1),
-  status: z.enum(["sent", "delivered", "read", "failed"]),
-  biz_opaque_callback_data: z.string().optional(),
-});
-
-const ChangeValue = z.object({
-  metadata: z.object({ phone_number_id: z.string().min(1) }),
-  messages: z.array(InboundMessage).optional(),
-  statuses: z.array(StatusUpdate).optional(),
-});
-
-const WebhookBody = z.object({
-  object: z.string(),
-  entry: z
-    .array(
-      z.object({
-        changes: z
-          .array(z.object({ field: z.string(), value: z.unknown() }))
-          .optional(),
-      }),
-    )
-    .optional(),
-});
-
-// --- handlers -------------------------------------------------------------------
-
-async function handleVerification(url: URL): Promise<Response> {
-  const mode = url.searchParams.get("hub.mode");
-  const token = url.searchParams.get("hub.verify_token");
-  const challenge = url.searchParams.get("hub.challenge");
-
-  if (mode !== "subscribe" || token !== VERIFY_TOKEN || !challenge) {
-    return new Response("forbidden", { status: 403 });
-  }
-  return new Response(challenge, { status: 200 });
-}
-
-async function ingestMessage(phoneNumberId: string, message: z.infer<typeof InboundMessage>) {
-  await sql`
-    select * from internal.ingest_webhook(
-      'meta',
-      ${phoneNumberId},
-      ${message.id},
-      'message_inbound',
-      ${sql.json({
-        from: `+${message.from}`,
-        message: {
-          type: message.type,
-          text: message.text?.body ?? null,
-          // Sobe ao mesmo nível de `text` de propósito: quem lê a linha em
-          // `public.messages.content` procura o toque num lugar só, sem
-          // conhecer o formato da Meta.
-          button_reply: message.interactive?.button_reply ?? null,
-        },
-      })}
-    )
-  `;
-  // `unknown_account` e `duplicate` são desfechos, não erros: a função decidiu,
-  // o evento tem rastro (ou deliberadamente não tem), e a Meta recebe 200 para
-  // não reentregar eternamente o que nunca vai mudar de resultado.
-}
-
-async function correlateStatus(status: z.infer<typeof StatusUpdate>) {
-  // Sem a chave opaca não há o que correlacionar — mensagens de outras origens
-  // (ou anteriores a nós) passam batido, de propósito.
-  if (!status.biz_opaque_callback_data) return;
-  if (status.status === "sent") return; // 'delivered'/'read'/'failed' decidem; 'sent' cru não
-
-  const mapped = status.status === "failed" ? "failed" : "sent";
-  await sql`
-    select internal.correlate_outbox_status(
-      ${status.biz_opaque_callback_data},
-      ${mapped},
-      ${status.id}
-    )
-  `;
-}
-
-async function handleEvents(request: Request): Promise<Response> {
-  const rawBody = await request.text();
-
-  if (!(await signatureIsValid(rawBody, request.headers.get("x-hub-signature-256")))) {
-    return new Response("invalid signature", { status: 401 });
-  }
-
-  let body: z.infer<typeof WebhookBody>;
-  try {
-    body = WebhookBody.parse(JSON.parse(rawBody));
-  } catch {
-    // Assinada pela Meta mas fora do formato: rejeitar alto. 400 sem retry é
-    // melhor que "usa o que parseou".
-    return new Response("malformed payload", { status: 400 });
-  }
-
-  if (body.object !== "whatsapp_business_account") {
-    return new Response(JSON.stringify({ ignored: true }), { status: 200 });
-  }
-
-  for (const entry of body.entry ?? []) {
-    for (const change of entry.changes ?? []) {
-      if (change.field !== "messages") continue;
-
-      const parsed = ChangeValue.safeParse(change.value);
-      if (!parsed.success) continue; // estrito: o que não valida não entra
-
-      const { metadata, messages, statuses } = parsed.data;
-      for (const message of messages ?? []) {
-        await ingestMessage(metadata.phone_number_id, message);
-      }
-      for (const status of statuses ?? []) {
-        await correlateStatus(status);
-      }
-    }
-  }
-
-  return new Response(JSON.stringify({ received: true }), { status: 200 });
-}
-
-Deno.serve(async (request: Request) => {
-  const url = new URL(request.url);
-
-  if (request.method === "GET") return handleVerification(url);
-  if (request.method === "POST") {
-    try {
-      return await handleEvents(request);
-    } catch (error) {
-      // Erro NOSSO (banco fora, bug): 500 faz a Meta reentregar, e a
-      // idempotência da ingestão faz a reentrega ser segura. É o único lugar
-      // onde "tente de novo" é a resposta certa para o remetente.
-      console.error("[ingest-meta]", error);
-      return new Response("internal error", { status: 500 });
-    }
-  }
-  return new Response("method not allowed", { status: 405 });
-});
+Deno.serve((request: Request) => handleRequest(request, deps));
