@@ -6,7 +6,62 @@ Este arquivo é o ponto de retomada entre sessões. Quem chegar aqui lê isto, o
 
 ---
 
-## Em uma tela: onde o E2 está (2026-08-06)
+## Em uma tela: onde o E3 está (2026-08-07)
+
+**O marco E3 está construído em código, em treze PRs empilhados e nenhum mergeado** — o merge é ação do Bruno, e a ordem importa porque cada PR tem o anterior como base. Suítes medidas nesta máquina no fechamento: **1741** em `unit or db` · **58** em `pipeline` (1 pulado no Windows) · **5 pulados** em `contract` (sem credencial) · `ruff check` e `lint-imports` limpos · carga de 10× com perda zero.
+
+| Ordem | PR | Passo | O que entrega |
+|---|---|---|---|
+| 1 | [#55](https://github.com/matheusmarques6/agents-worder/pull/55) | **P1** · E2 S9b | pós-envio, `q_evals`, auto-correção — o E2 fecha em código |
+| 2 | [#56](https://github.com/matheusmarques6/agents-worder/pull/56) | **S1** | a escada de proteção, pura, com os *guards* |
+| 3 | [#57](https://github.com/matheusmarques6/agents-worder/pull/57) | **S2** | 7 tabelas com RLS, o teto como CHECK, docs canônicos |
+| 4 | [#58](https://github.com/matheusmarques6/agents-worder/pull/58) | **S3** | o abandono vira cadência; o toque fixo do E1 é aposentado |
+| 5 | [#59](https://github.com/matheusmarques6/agents-worder/pull/59) | **S4** | dispatcher, escada no caminho, CAS de gravação |
+| 6 | [#60](https://github.com/matheusmarques6/agents-worder/pull/60) | **S5** | `order_paid` cancela e credita a conversão |
+| 7 | [#61](https://github.com/matheusmarques6/agents-worder/pull/61) | **S6** | as três vias de supressão; quem manda entre duas tabelas |
+| 8 | [#62](https://github.com/matheusmarques6/agents-worder/pull/62) | **P2** | a Edge Function deixa de ser o único código sem teste |
+| 9 | [#63](https://github.com/matheusmarques6/agents-worder/pull/63) | **S7** | Evolution + anti-ban, tier da Cloud, validador de copy |
+| 10 | [#64](https://github.com/matheusmarques6/agents-worder/pull/64) | **S8** | reconciliação por poll, pela mesma porta do webhook |
+| 11 | [#65](https://github.com/matheusmarques6/agents-worder/pull/65) | **S9** | as tools que o modelo escolhe |
+| 12 | [#66](https://github.com/matheusmarques6/agents-worder/pull/66) | **S10** | cenário 11, dia real, carga 10×, contrações |
+| 13 | [#67](https://github.com/matheusmarques6/agents-worder/pull/67) | **S11** | alertas das falhas silenciosas, contadores, `traceparent` |
+
+**O que o marco entrega, em uma frase:** o evento de abandono vira funil com cadência, **todo** toque proativo atravessa a escada e um CAS que revalida os fatos antes de gravar, pagamento e resposta matam o funil, a supressão tem as três vias do RF-033, existe segundo canal com anti-ban, e a reconciliação por poll entra pela mesma porta idempotente do webhook.
+
+**O que ficou pendente de credencial, e só disso:** a suíte `contract` (Evolution, Shopify, Meta), a exportação OTLP para Logfire/Grafana e o cenário 14. Tudo o mais fecha contra dublê e cassete — o padrão do E1 e do E2.
+
+### O que depende do Bruno depois do E3
+
+**Ações no repositório**
+
+| # | Item | Bloqueia | Como entregar |
+|---|---|---|---|
+| 1 | **Mergear os treze PRs na ordem da tabela acima** | tudo — nada do E3 está na `main` | cada um tem o anterior como base; fora de ordem, o diff mente |
+| 2 | **Ruleset da `main` passa a exigir 5 checks** | o `edge-tests` roda e **não é obrigatório**, então a porta de ingestão pode voltar a quebrar sem barrar merge | Settings → Rules → o ruleset "main protegida"; é ação de admin, que o agente não tem |
+
+**Credenciais (o código fecha sem elas; as provas contra o mundo real, não)**
+
+| # | Item | Bloqueia |
+|---|---|---|
+| 3 | `AGENTS_OPENROUTER_API_KEY` na máquina nova | suíte `contract` do LLM e o S11 do E2 (pack real) |
+| 4 | Logfire (write token) + Grafana Cloud (OTLP, instance ID, token) | a exportação de telemetria e o cenário 14 — a metade in-app já existe |
+| 5 | Token System User da Meta + `phone_number_id` de teste | a prova 1 do E1 e a conversa real |
+| 6 | Instância Evolution + número | a `contract` do canal novo — e ela responde a pergunta nº 8 abaixo |
+| 7 | Loja dev Shopify + OAuth | o poll real; o adaptador fecha contra cassete |
+
+**Decisões de produto que o marco desenterrou e não podia tomar sozinho**
+
+| # | Pergunta | Por que ela existe |
+|---|---|---|
+| 8 | **Qual a cadência do warm-up da Evolution?** | `warmup_stage` é lido pelo anti-ban e **ninguém o avança**: o 20→50→100 está preso no degrau 0, e `warmup_started_at` não tem leitor nem escritor. O estado atual é o mais conservador possível (suprime envio, nunca cria), então não há urgência de segurança — há promessa de produto não cumprida. Falta a regra: avança por dias no degrau? por volume entregue sem bloqueio? |
+| 9 | **Como fica o consentimento na Evolution?** | O adaptador **recusa** um toque que carrega os botões Autorizar/Bloquear, porque a Evolution não honra nenhuma das duas metades. Consequência real: **primeiro toque a contato novo não sai por Evolution**. Das saídas possíveis, recusar foi a única que suprime um envio em vez de criar um — enviar sem a escolha é vender para quem nunca consentiu e arquivar como `sent` |
+| 10 | **O que o agente responde a quem toca em "Bloquear"?** | Hoje o bloqueio é aplicado e o turno **continua**: o contato recebe uma resposta reativa comum. O RF-033 não diz nada sobre reconhecer o bloqueio, e "pronto, não enviaremos mais mensagens" é provavelmente o que uma pessoa espera. Decisão antes do E4 |
+| 11 | **O gate ganha `ruff format --check`?** | Pendência herdada do E1 (decisão 76) e agravada: o repositório tem ~57 arquivos fora do formato, e o `CLAUDE.md` documenta `ruff format .` como se fosse seguro — quem seguir o doc reformata arquivo alheio. A linha do doc foi corrigida no S10; a decisão de fundo (zerar o drift num PR chore e exigir no gate) continua sua, porque muda o custo de todo PR futuro |
+| 12 | **A lei do idioma vale ou muda?** | O `CLAUDE.md` manda código, identificadores e comentários em inglês, e a decisão 53 reafirmou. Na prática **28 arquivos de produção e quase todos os testes têm comentário em português** — a deriva é do repositório, não de um passo. Eu instruí os agentes do E3 a nascerem em inglês, mas duas leis vigentes ao mesmo tempo é o que produz deriva. Ou a lei muda, ou a tradução vira item de dívida com dono |
+
+---
+
+## Em uma tela: onde o E2 estava (2026-08-06) — histórico
 
 **`main` em `288be7f`. Nada pendente fora do git, nenhum PR aberto.** Suítes
 rodadas na máquina nova em 2026-08-06: **858** em `unit or db` · **33** em
@@ -271,6 +326,22 @@ que subiram são mais novas que as da tabela acima — **uv 0.12.0** e **pnpm 11
 e não mudaram nada. O `gh` precisou de `gh auth login` à parte: o `git push` funciona
 pelo credential manager do Windows, o `gh` usa outra credencial e não herda essa.
 
+### 4.1 Armadilhas novas, medidas no E3
+
+- **`uv` não entra no PATH desta máquina.** Ele existe em
+  `C:\Users\Usuario\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe`
+  e o Bash do Git nem o enxerga. Todo comando do runtime precisa do prefixo
+  `$env:PATH = "<esse caminho>;$env:PATH";` no PowerShell.
+- **Deno não está instalado.** A suíte da Edge Function (40 casos) **só roda no
+  CI** — o job `edge-tests` instala o Deno pela action oficial. Compensação local
+  possível: `tsc --noEmit --strict` sobre `_lib/`, que confere nomes de export e
+  parsing, mas não os tipos que atravessam o zod.
+- **`ruff format .` reformata ~57 arquivos alheios.** O `CLAUDE.md` já foi
+  corrigido para dizer "só nos arquivos tocados"; a decisão de fundo é do Bruno.
+- **Número de linha de base em briefing envelhece sozinho.** As travas de fitness
+  são parametrizadas por **arquivo**, então toda migration nova e todo módulo de
+  teste novo movem a contagem. O gate é **verde**, não um número.
+
 ### 4. Três armadilhas que já custaram tempo
 
 - **`db` e `pipeline` NUNCA rodam ao mesmo tempo** contra o mesmo banco: o nível
@@ -482,6 +553,26 @@ Ficam registradas aqui porque mudam como o código se comporta:
     O medidor é o **irmão do think-gate do S4, do outro lado do turno**: o think-gate decide antes se a entrada merece raciocínio caro; o risk-gate decide depois se a resposta merece auditoria cara. Puro, determinístico, motivo como dado — e com ele o `Randomness` sai do desenho do S9b. Sinais, todos lidos da **resposta do agente**: valor/dinheiro · prazo/data · compromisso ("vou trocar", "garanto", "reembolso") · afirmação ancorada em conhecimento recuperado (`tool_calls`) · nota apertada ou regeneração do Judge 1 (`judge_scores`) · atrito vindo do think-gate. Nenhum sinal → arquiva como `skipped_low_risk`, sem pagar juiz. Dentro do shadow, 100% sem consultar o medidor.
     **O medidor decide auditoria, nunca bloqueio** — segurança continua sendo 100% do Judge 1 pré-envio. Falso negativo dele custa medição, jamais proteção; é por isso que pode ser heurístico.
     **O ponto cego, e como se fecha sem sorteio:** afirmação falsa sem número, data ou promessa ("sim, esse tênis é impermeável") escapa. Em vez de amostragem contínua, **lote de calibração sob demanda no molde do S11**: roda o juiz sobre o que o medidor DESCARTOU e compara. Violação achada ali = sinal novo, com teste vermelho primeiro. Vale a lei da casa: **trava que nunca foi confrontada com o que ela deixa passar é decoração.**
+
+### E3 — Recuperação completa (decisões 93 a 104)
+
+93. **A escada de proteção é pura, e os *guards* são a razão de ela existir separada (S1).** `dispatch/ladder.py` decide na ordem canônica (supressão → quota → staleness → limites) com **motivo como dado** — a terceira irmã do think-gate e do medidor de perigo. O que o passo acrescenta ao padrão: a decisão devolve também **os fatos que a sustentaram**, e o S4 os revalida como cláusula `WHERE`. Precedência é asserção, não convenção: contato suprimido reportado como "estourou o limite" manda o operador para a tela errada e sugere que o toque sai amanhã, quando ele não sai nunca mais.
+94. **Emenda da própria decisão 93, escrita depois de construir o S4: o CAS é a aplicação, a escada é otimização mais vocabulário.** A sabotagem-coroa do S4 (remover a escada do caminho) mediu **zero testes caindo** — porque o CAS revalida todas as regras e o caminho de conflito re-roda a escada só para nomear o motivo. O teste que faltava foi escrito sobre a **quota**, a única regra que o CAS não consegue reafirmar (a decisão de não criar `quota_rules` a deixa sem tabela), e a segunda medição deu 2. O valor real da separação não é redundância: é que os limiares (24h, 72h, 80%) **viajam como parâmetro** para o SQL, então não existe número mágico duplicado. **Portão que pode ser removido sem nenhum teste reclamar não é portão.**
+95. **Todo proativo sai por uma porta só (S3/S4).** O plano mandava o primeiro toque do funil ir direto para a outbox; isso o fazia **pular a escada**, enquanto o RF-033 exige supressão checada antes de todo envio proativo e o RF-034 soma todas as origens na janela de 24h. `start_funnel_run` passou a criar **apenas** `scheduled_touches`, com o nº 1 já vencido, e o dispatcher virou a única saída. Achado durante o S1, antes de existir o código que o esconderia.
+96. **Staleness é checado sempre, não só acima de 5 minutos (S1).** O "> 5 min" do RF-032 descreve *quando a checagem passou a ser necessária* (drenagem pós-queda), não licença para pular proteção em evento fresco — e com a decisão 95 o caminho fresco virou o caminho normal. Ser mais estrito que a letra do requisito só pode suprimir um envio, nunca criar um. O RF-032 ganhou o esclarecimento datado no mesmo PR.
+97. **O teto de 4 toques/contato/24h virou CHECK no banco, com trigger (S2).** Revogar privilégio de coluna **não era durável**: qualquer `GRANT UPDATE ON tenants` posterior — que a tela de configurações do E5 vai querer — apagaria a proteção, e todo teste de "permission denied" continuaria verde pelo motivo errado. A sabotagem provou nos dois estágios: com o privilégio devolvido *e* uma policy de escrita criada, a escrita continua recusada. `internal.set_proactive_cap` não repete o número 4: um número canônico, um lugar.
+98. **`suppression_list` é a autoridade; `contacts.opt_status` é projeção por trigger (S6).** Duas tabelas respondiam "este contato está bloqueado?" e duas respostas divergem no pior dia. O reconhecimento do toque em "Bloquear" é **determinístico e mora no turno de entrada, entre a FASE 1 e a FASE 2** — decisão de consentimento nunca passa pelo modelo. Não foi para a ingestão porque não há janela de dano a fechar: a mensagem de entrada já incrementa `next_inbound_seq`, e o CAS recusa qualquer toque que corra com ela.
+99. **`record_optout` é obrigatória, não escolha do lojista (S6) — e a régua que isso criou (S9).** Um lojista que pudesse desligá-la estaria desligando o direito de recusa **de outra pessoa**. A régua, escrita no teste do catálogo: direito de terceiro → obrigatória; capacidade do próprio lojista → escolha dele. Por ela, `get_order`, `get_tracking` e `escalate_to_human` entraram como escolha — o dicionário de dados já as nomeava assim.
+100. **O Judge 1 é do tempo real; disparo e campanha têm validador determinístico (D3 do Bruno, S7).** A lei do `CLAUDE.md`, a arquitetura §5.5 e o RF-015 passaram a dizer "toda resposta **reativa**". No lugar do juiz, `dispatch/variation.py`: a variação anti-ban só pode variar o `copy_base` aprovado por humano e **não pode introduzir número, prazo, link ou promessa que a base não tenha**; violação não envia e abre alerta. Dois buracos fechados que só um leitor de português vê: número por extenso continua sendo número, e acento não faz "grátis" passar por um portão que barra "gratis". **Risco residual aceito e registrado:** é o único ponto do produto onde texto de modelo alcança um contato sem portão de modelo — o validador confere forma, nunca intenção.
+101. **A reconciliação ganhou role e conexão próprias em vez de um grant ao `worker_role` (S8).** Um teste do E1 reprovou e o comentário dele **antecipava o dia**: "quando a reconciliação por poll existir, o grant vira decisão consciente e não herança". `grant ingestion_role to worker_role` era uma linha; teria entregado a chave de escrita cross-tenant a todo turno de LLM, todo handler de evento e todo toque proativo do processo. A varredura tem a sua.
+102. **`TRUNCATE` no fixture de `pipeline` inchava o `pg_class` e dobrava o tempo da suíte (S10).** `TRUNCATE` não é grátis em tabela vazia: aloca novo relfilenode e escreve uma tupla morta de catálogo por relação, índice e toast — duas por teste, dez relações, um marco inteiro. Chegou a **973 linhas vivas contra 134.352 mortas, 31 MB**, e a partir daí toda consulta do processo passou a planejar contra esse catálogo (46s → 85s). Trocado por `DELETE`, o tempo ficou plano. **Regra nova de diagnóstico: quando o *tempo* de uma suíte está subindo, diagnostique o ambiente antes dos testes** — as duas falhas intermitentes perdidas são, muito provavelmente, prazos de relógio de parede cruzados por um mundo uniformemente mais lento.
+103. **`NOT NULL` recusado em `scheduled_touches.conversation_id`, com prova (S10).** A coluna é `on delete set null` porque um toque precisa sobreviver a uma conversa purgada — senão o cooldown de 72h esquece toques que saíram. Com a constraint aplicada, `delete from conversations` levanta `NotNullViolation`: ela quebraria a purga LGPD, que hoje só passa porque nada apaga conversa ainda. O invariante de nascimento é real; `NOT NULL` é o instrumento errado para ele.
+104. **A porta de ingestão respondia 400 onde a Meta exige 200 (P2).** A Cloud API reentrega **tudo** que não é 200, com backoff, por dias, e acaba degradando a assinatura — então o único ramo que jamais mudaria de resultado numa segunda tentativa era justamente o que pedia segundas tentativas. O eixo certo é **"reenviar ajudaria?"**, não "era válido?". Achado ao pagar a dívida de teste daquela porta, que era o único código de produção do repositório sem teste — e que desde o S6 carrega **consentimento**.
+
+### Duas regras que a execução do E3 produziu
+
+- **Guarda sem alvo mente.** Coluna ou parâmetro que nasce sem escritor no mesmo passo produz proteção decorativa: `start_funnel_run(p_order_id)` nasceu vazio no S3 e o S4 construiu contra ele uma guarda inteira — docstring, conjunto no CAS, corrida encenada — que em produção sempre revalidava contra NULL, com o teste se auto-alimentando por um `update` à mão. É o espelho de "config sem consumidor mente", e virou trava automática no S10 (`test_no_column_is_born_mute.py`).
+- **Exemplo de caso negativo nunca é o caso positivo do passo seguinte.** O E1 ilustrou "tipo não suportado é descartado" com `order_paid` — o tipo que o S5 passa a suportar. O invariante sobreviveu; o exemplo virou bomba-relógio.
 
 ### Jurisprudência do worder1 — mapa de uso
 
