@@ -188,6 +188,11 @@ class TouchSnapshot:
     touch_number: int
     cadence: list[Any]
     touch: ProactiveTouch
+    #: `contacts.opt_status`, the projection of `suppression_list` (S6). Read
+    #: here and not by the ladder because it decides what the touch SAYS, not
+    #: whether it may exist — a contact who is merely `pending` is a contact we
+    #: are allowed to write to and obliged to ask (RF-033a).
+    opt_status: str | None = None
 
 
 async def load_touch_snapshot(
@@ -235,10 +240,12 @@ async def load_touch_snapshot(
                    and other.sent_at > now() - %s),
                coalesce(c.next_inbound_seq, 0),
                ca.meta_tier,
-               coalesce(ca.tier_usage_24h, 0)
+               coalesce(ca.tier_usage_24h, 0),
+               ct.opt_status
           from public.scheduled_touches t
           join public.funnels f on f.id = t.funnel_id
           join public.tenants tn on tn.id = t.tenant_id
+          left join public.contacts ct on ct.id = t.contact_id
           left join public.conversations c on c.id = t.conversation_id
           left join public.channels_accounts ca on ca.id = c.channel_account_id
          where t.id = %s
@@ -266,6 +273,7 @@ async def load_touch_snapshot(
             tier_limit_24h=row[12],
             tier_usage_24h=row[13],
         ),
+        opt_status=row[14],
     )
 
 

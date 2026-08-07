@@ -21,6 +21,8 @@ column that starts existing halfway through has a blind period nobody remembers.
 
 from typing import Any
 
+from agents_runtime.dispatch import consent
+
 #: Keys of a cadence entry that are content rather than schedule. `n` and
 #: `delay` are the schedule and never reach a contact.
 _CTA = "cta"
@@ -39,16 +41,24 @@ class CadenceMissing(LookupError):
     """
 
 
-def render(cadence: list[dict[str, Any]], touch_number: int) -> dict[str, Any]:
+def render(
+    cadence: list[dict[str, Any]], touch_number: int, *, opt_status: str | None = None
+) -> dict[str, Any]:
     """The outbox payload for touch `n` of this cadence.
 
     Deterministic by construction — same cadence, same number, same bytes — so
     that a redelivered job produces the identical payload under the identical
     idempotency key, and the outbox's UNIQUE stays the second lock on the door.
+
+    `opt_status` is the contact's, and it is the only thing that can add a key
+    the merchant did not write: RF-033(a) says every touch to a contact who has
+    not consented carries the Autorizar/Bloquear pair. The buttons are decided
+    HERE, before the outbox, for the same reason the copy is (D10) — the sender
+    delivers content, it never composes it.
     """
     for entry in cadence:
         if _matches(entry, touch_number):
-            return _payload(entry)
+            return _payload(entry, opt_status)
 
     raise CadenceMissing(f"the cadence has no touch n={touch_number}")
 
@@ -65,7 +75,7 @@ def _matches(entry: object, touch_number: int) -> bool:
         return False
 
 
-def _payload(entry: dict[str, Any]) -> dict[str, Any]:
+def _payload(entry: dict[str, Any], opt_status: str | None) -> dict[str, Any]:
     text = entry.get("copy_base")
     if not isinstance(text, str) or not text.strip():
         raise CadenceMissing(f"touch n={entry.get('n')!r} has no copy_base to send")
@@ -75,4 +85,8 @@ def _payload(entry: dict[str, Any]) -> dict[str, Any]:
         payload[_TEMPLATE] = entry[_TEMPLATE]
     if isinstance(entry.get(_CTA), str):
         payload[_CTA] = entry[_CTA]
+
+    buttons = consent.buttons_for(opt_status)
+    if buttons is not None:
+        payload[consent.BUTTONS] = buttons
     return payload

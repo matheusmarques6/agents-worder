@@ -30,6 +30,15 @@ DEFAULT_API_VERSION = "v19.0"
 
 GRAPH_URL = "https://graph.facebook.com"
 
+#: The payload key the dispatch writes when a touch carries the consent buttons
+#: of RF-033(a). Held as a literal rather than imported from
+#: `agents_runtime.dispatch.consent`, for the same reason `"text"` is a literal
+#: here: a sender that imported the dispatch would be a sender that knows how
+#: content is composed. The two spellings are pinned to each other by
+#: `tests/unit/test_cloud_api_consent_buttons.py` instead — a comparison a test
+#: can fail, rather than an import that hides the coupling.
+CONSENT_BUTTONS = "buttons"
+
 
 class CloudApiChannel:
     """One door out, per ADR: only senders hold an instance of this."""
@@ -75,15 +84,52 @@ class CloudApiChannel:
             # Guessing at an unknown shape would send SOMETHING to a customer.
             raise ValueError(f"payload inválido: sem 'text' — chaves {sorted(send.payload)}")
 
-        return {
+        envelope = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": send.to_phone_e164,
-            "type": "text",
-            "text": {"body": str(send.payload["text"])},
             # One key, two worlds (decisão 59): the status webhook echoes this
             # back, and that echo is what resolves an unknown without resending.
             "biz_opaque_callback_data": send.idempotency_key,
+        }
+
+        buttons = send.payload.get(CONSENT_BUTTONS)
+        if buttons:
+            if not all(
+                isinstance(button, dict) and "id" in button and "title" in button
+                for button in buttons
+            ):
+                # Never guess at a button. A malformed one would either drop the
+                # contact's way of refusing or send a control they cannot use.
+                raise ValueError(f"payload inválido: botões sem id/title — {buttons!r}")
+            # RF-033(a). The Cloud API's own shape for reply buttons, mined from
+            # its reference and NOT invented: type `interactive`, interactive
+            # type `button`, the text as `body`, and each button as
+            # `{type: reply, reply: {id, title}}` — the id being the one that
+            # comes back in `interactive.button_reply.id`, which is the whole
+            # handshake `dispatch/consent.py` owns both ends of.
+            return {
+                **envelope,
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "body": {"text": str(send.payload["text"])},
+                    "action": {
+                        "buttons": [
+                            {
+                                "type": "reply",
+                                "reply": {"id": button["id"], "title": button["title"]},
+                            }
+                            for button in buttons
+                        ]
+                    },
+                },
+            }
+
+        return {
+            **envelope,
+            "type": "text",
+            "text": {"body": str(send.payload["text"])},
         }
 
     async def aclose(self) -> None:

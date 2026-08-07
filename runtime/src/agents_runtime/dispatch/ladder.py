@@ -61,7 +61,13 @@ snapshot loader and `internal.dispatch_touch` both receive it as a parameter
 rather than writing `interval '24 hours'` of their own. That is deliberate and
 it is the answer to a real hazard — a module that declares a window while
 somebody else counts one is two numbers free to disagree in silence, and
-`tests/db/test_dispatch_windows.py` is what keeps them the same number."""
+`tests/db/test_dispatch_touch_cas.py::TestTheWindowsComeFromTheLadder` is what
+keeps them the same number.
+
+(That reference used to name `tests/db/test_dispatch_windows.py`, a file that
+was never written — the proof went into the CAS suite instead. Corrected in S6,
+because a proof cited by a name nothing can fail is worse than an absent one: a
+reviewer reads it, believes it, and stops looking.)"""
 
 FUNNEL_COOLDOWN = timedelta(hours=72)
 """RF-034: the gap a contact gets between two DIFFERENT funnels. Inside one
