@@ -180,6 +180,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | connector_account_id | uuid FK | UNIQUE (connector_account_id, external_id) |
 | external_id | text NOT NULL | id do pedido na plataforma |
 | customer_external_id | text | liga ao `customers.external_id` |
+| contact_id | uuid FK nullable → contacts ON DELETE SET NULL | **de quem é este pedido**, gravado pelo espelho (E3 S5) no instante em que o telefone do evento estava na mão. Existe porque o caminho anterior — `customer_external_id` → `customers.external_id` → `customers.phone_e164` → `contacts.phone_e164` — não é só lento: duas dessas colunas são nullable e uma é a formatação de telefone da plataforma, então um join que erra devolve "sem contato", que é indistinguível de "nunca falamos com essa pessoa" — exatamente o caso em que o handler de `order_paid` deve não fazer nada. O primeiro escritor vence: um evento posterior sem telefone nunca apaga o vínculo |
 | status | text | fulfillment/status geral |
 | financial_status | text NOT NULL DEFAULT 'pending' CHECK | `pending \| authorized \| paid \| partially_refunded \| refunded \| voided \| cancelled` — pago cancela funil (nota 3). O vocabulário é **normalizado pelo adaptador do conector**, nunca a palavra crua da plataforma: um valor não mapeado não falharia, apenas nunca seria igual a `paid`, e o lojista seguiria cobrando quem já pagou. O CHECK é o que torna o esquecimento barulhento |
 | currency | text NOT NULL DEFAULT 'BRL' | ISO-4217 (CHECK `^[A-Z]{3}$`) |
@@ -378,7 +379,7 @@ Este documento é o passo imediatamente anterior ao schema SQL: cada atributo ab
 | contact_id | uuid FK nullable | ON DELETE SET NULL — a purga por contato corta a pessoa e deixa o dinheiro, que é o que a LGPD pede |
 | scheduled_touch_id | uuid FK nullable | ON DELETE SET NULL — qual toque levou à conversão |
 | order_id | uuid FK nullable | **UNIQUE** — um pagamento credita um funil só; duas linhas dobrariam o único número pelo qual o lojista compra o produto |
-| amount | numeric(12,2) NOT NULL | copiado, não juntado: o pedido pode sumir e o valor não pode |
+| amount | numeric(12,2) **nullable**, CHECK `>= 0` | copiado, não juntado: o pedido pode sumir e o valor não pode. **NULL tem significado declarado — "recuperado, valor desconhecido"** (a plataforma não informou o total). Nasceu `NOT NULL` no S2 e foi afrouxado no S5: obrigar um valor forçava `coalesce(total, 0)`, e "recuperei uma venda de valor desconhecido" virava "recuperei R$ 0,00" — duas frases diferentes que viram a mesma dentro de um `sum()`, para sempre. Com NULL a soma ignora o que não sabe e a contagem continua contando o fato |
 | currency | text NOT NULL DEFAULT 'BRL' | ISO-4217 (CHECK) |
 | attributed_at | timestamptz NOT NULL DEFAULT now() | pedido pago dentro de `tenants.attribution_window_hours` depois de um toque enviado |
 | created_at | timestamptz | |
