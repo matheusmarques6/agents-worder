@@ -1,0 +1,25 @@
+-- E3 · S10 — a fase de CONTRAÇÃO do shim N-1 de `apply_domain_event`.
+--
+-- O S3 aposentou o toque de texto fixo do E1 (D6) e, como manda o
+-- expand-contract, **não** removeu a assinatura antiga: a imagem anterior do
+-- runtime ainda chamava `internal.apply_domain_event(bigint, text)` durante a
+-- janela de deploy, e quebrar uma chamada no meio de um deploy é derrubar a
+-- ingestão de eventos de domínio de todo mundo por alguns minutos. O shim
+-- passou a ignorar o texto e delegar para a forma de uma casa.
+--
+-- Essa janela fechou. O runtime em produção é o de uma casa, a compatibilidade
+-- N-1 foi cumprida, e o shim virou o que todo andaime esquecido vira: uma porta
+-- a mais para a mesma sala, com `security definer` e `grant execute` próprios,
+-- que um dia alguém encontra e usa achando que é a atual. A migration que o
+-- criou já dizia, por escrito, "removido na fase de contração".
+--
+-- A remoção é do SHIM, não do comportamento: a função de uma casa continua
+-- exatamente onde estava, com os mesmos desfechos e o mesmo EXECUTE mínimo.
+-- Nenhum invariante do handler muda de forma — o que muda é quantos caminhos
+-- chegam até ele.
+--
+-- Expand-contract, a metade que quase nunca acontece: um repositório que só
+-- expande acumula uma superfície que ninguém consegue mais raciocinar sobre.
+-- Se ela nunca é executada, o que ela documenta é que este projeto não contrai.
+
+drop function internal.apply_domain_event(bigint, text);

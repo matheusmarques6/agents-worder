@@ -117,10 +117,12 @@ All commands run from the repository root.
 | `uv run --directory runtime pytest -m pipeline` | full runtime loop + Postgres + pgmq |
 | `uv run --directory runtime pytest -m contract` | ONE real external API — never blocking on a PR |
 | `uv run --directory runtime ruff check .` | lint (includes the ban on `print`) |
-| `uv run --directory runtime ruff format .` | format |
+| `uv run --directory runtime ruff format <files you touched>` | format — **the files of the change, never `.`** (see below) |
 | `uv run --directory runtime lint-imports` | module boundary contracts (arquitetura §3) |
 
 The test level comes from the directory (`tests/unit/`, `tests/db/`, …) via `tests/conftest.py`; `rls` is the one marker applied by hand, because the leak suite lives inside `tests/db/`.
+
+**`ruff format .` is a trap, and the doc used to set it.** The formatter is NOT a gate: the blocking lane runs `ruff check .` and nothing else (`.github/workflows/pr.yml`), so the repository has never been formatter-clean — `ruff format --check .` reports **58 files** it would rewrite, all of them pre-existing and none of them yours. Running it over `.` therefore produces a diff where the change under review is a handful of lines buried in thousands, which is a review nobody can do and a `git blame` that stops answering. Format the files your change touches, and leave the rest for a deliberate, single-purpose sweep that is nobody's step but its own.
 
 **Hub (Next.js, `pnpm`)**
 
