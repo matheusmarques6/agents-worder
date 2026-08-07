@@ -44,6 +44,12 @@ class QueueingConfig:
     inbound_debounce: timedelta = timedelta(seconds=10)
     coalescer_tick: timedelta = timedelta(seconds=2)
 
+    # A varredura dos toques vencidos (dicionário §5.5). Um minuto porque a
+    # cadência de um funil se mede em horas: a latência do tique é ruído ao lado
+    # do intervalo entre dois toques, e varrer mais rápido só multiplicaria uma
+    # consulta cross-tenant sem mudar o que o contato vê.
+    dispatcher_tick: timedelta = timedelta(minutes=1)
+
     # A escada da arquitetura: 30s, 2min, 8min… O teto não morde nos limites
     # atuais (cinco tentativas param em ~34 min); existe para o dia em que um
     # limite subir sem ninguém reler esta conta.
@@ -104,6 +110,7 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
         heartbeat_every=_ms("AGENTS_WORK_HEARTBEAT_MS", base.heartbeat_every),
         conversation_lease=_ms("AGENTS_LEASE_MS", base.conversation_lease),
         coalescer_tick=_ms("AGENTS_COALESCER_TICK_MS", base.coalescer_tick),
+        dispatcher_tick=_ms("AGENTS_DISPATCHER_TICK_MS", base.dispatcher_tick),
         busy_retry=_ms("AGENTS_BUSY_RETRY_MS", base.busy_retry),
         idle_pause=_ms("AGENTS_IDLE_PAUSE_MS", base.idle_pause),
         sender_poll=_ms("AGENTS_SENDER_POLL_MS", base.sender_poll),

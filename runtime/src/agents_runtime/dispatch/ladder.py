@@ -54,13 +54,24 @@ suppress a send, never create one."""
 
 PROACTIVE_WINDOW = timedelta(hours=24)
 """RF-034: the rolling window the per-contact touch count is measured over.
-Counting is the caller's job — the window is stated here so the two cannot
-drift apart."""
+
+Counting is the caller's job, over `internal.message_outbox` — every proactive
+origin, by `kind`, by `created_at`. The window is declared here and TRAVELS: the
+snapshot loader and `internal.dispatch_touch` both receive it as a parameter
+rather than writing `interval '24 hours'` of their own. That is deliberate and
+it is the answer to a real hazard — a module that declares a window while
+somebody else counts one is two numbers free to disagree in silence, and
+`tests/db/test_dispatch_windows.py` is what keeps them the same number."""
 
 FUNNEL_COOLDOWN = timedelta(hours=72)
 """RF-034: the gap a contact gets between two DIFFERENT funnels. Inside one
 funnel the spacing is the funnel's own cadence — there is no per-funnel touch
-cap."""
+cap.
+
+Measured over `scheduled_touches.sent_at` of rows with `status = 'sent'` and a
+different `funnel_id`, and it has to be measured there because funnel identity
+exists in no other table — the outbox knows `kind`, not which funnel. Travels
+as a parameter, for the same reason as `PROACTIVE_WINDOW`."""
 
 DEFAULT_MAX_PER_CONTACT_24H = 1
 PLATFORM_MAX_PER_CONTACT_24H = 4
@@ -161,12 +172,23 @@ class ProactiveTouch:
 
 @dataclass(frozen=True, slots=True)
 class Guards:
-    """The facts the decision stood on, shaped for S4's compare-and-set.
+    """The facts the decision stood on, shaped for the compare-and-set.
 
-    Each field is meant to become one conjunct of the `WHERE` that writes the
-    outbox row, so that the write fails rather than sends when a fact moved
-    between the decision and the insert. The intended clause is written next to
-    each one; S4 owns the SQL, this owns the facts.
+    Each field is one conjunct of the `WHERE` in `internal.dispatch_touch`
+    (migration 20260806000004), so the write fails rather than sends when a fact
+    moved between the decision and the insert. The clause each one became is
+    written next to it, and the S4 lesson is why the *sources* are named as
+    columns that exist: an earlier draft of this docstring invented a column
+    (`is_proactive`) that no table has, which is a specification nobody can
+    implement and a review nobody can fail.
+
+    Two of the facts are carried as VALUES and compared (`inbound_seq`,
+    `max_proactive_per_24h`); the rest are RECOMPUTED by the `WHERE` rather than
+    compared, because for those a change in between can only ever make the
+    predicate stricter — a suppression appears, an order is paid, a touch goes
+    out — and the strict direction is the one a protection is allowed to move
+    in. They are carried anyway, because what the decision saw is what an
+    operator reads months later.
 
     `quota` is deliberately absent: there is no `quota_rules` table to
     revalidate against (D9), so there is no conjunct to write. It is the one
@@ -175,36 +197,60 @@ class Guards:
     """
 
     suppression_absent: bool
-    """`AND NOT EXISTS (SELECT 1 FROM suppression_list
-    WHERE tenant_id = $tenant AND contact_id = $contact)`"""
+    """`AND NOT EXISTS (SELECT 1 FROM public.suppression_list s
+    WHERE s.tenant_id = t.tenant_id AND s.contact_id = t.contact_id)` (RF-033).
+    One row per contact — suppression is a state, not a log."""
 
     order_unpaid: bool
-    """`AND NOT EXISTS (SELECT 1 FROM orders
-    WHERE id = $order AND financial_status = 'paid')`"""
+    """`AND NOT EXISTS (SELECT 1 FROM public.orders o
+    WHERE o.id = t.order_id AND o.financial_status = 'paid')`, over the order the
+    funnel is chasing (`scheduled_touches.order_id`). `paid` is a normalised
+    value, not the platform's word — the CHECK on the column is what makes an
+    unmapped vocabulary loud instead of silently never equal to `paid`."""
 
     inbound_seq: int
-    """`AND c.next_inbound_seq = $inbound_seq` — a message that arrived in the
-    meantime bumped the counter, and the touch dies with `cancel_reason =
-    'replied'` (D7)."""
+    """`AND EXISTS (SELECT 1 FROM public.conversations c
+    WHERE c.id = t.conversation_id AND c.next_inbound_seq = $inbound_seq)` — a
+    message that arrived in the meantime bumped the counter, the equality fails,
+    and the touch dies with `cancel_reason = 'stale_newer_message'`: the
+    ladder's own word, never a synonym (D7, and the S2 finding that two values
+    for one fact break the S11 metric).
+
+    The counter is the atomic device, the same one the central invariant's CAS
+    uses in E1; the CAS also carries the same fact by its other name (`no
+    inbound message newer than t.event_at`), because that is the shape the rule
+    is written in and a guard should enforce the rule's own words."""
 
     proactive_sends_24h: int
-    """What was counted, for the record. The enforcing conjunct recounts:
-    `AND (SELECT count(*) FROM ... WHERE contact_id = $contact AND is_proactive
-    AND sent_at > now() - interval '24 hours') < $max_proactive_per_24h`"""
+    """What was counted, for the record. The enforcing conjunct recounts, over
+    the outbox — the one door EVERY proactive send passes through, which is why
+    RF-034's "all origins" cannot be counted on `scheduled_touches`:
+    `AND (SELECT count(*) FROM internal.message_outbox o
+    WHERE o.contact_id = t.contact_id AND o.kind IN ('funnel_touch','followup')
+    AND o.created_at > now() - $proactive_window) < $max_proactive_per_24h`.
+    By `created_at`, the commitment, not `sent_at`, the delivery: a touch
+    already written and not yet delivered has to count, or a burst slips two
+    touches past a limit of one."""
 
     max_proactive_per_24h: int
     """The EFFECTIVE cap — already clamped. What goes into the `WHERE` has to be
     what the rule used, or the revalidation would be laxer than the decision."""
 
     other_funnel_touch_at: datetime | None
-    """`AND NOT EXISTS (SELECT 1 FROM scheduled_touches WHERE contact_id =
-    $contact AND funnel_id <> $funnel AND status = 'sent' AND sent_at > now() -
-    interval '72 hours')` — recomputed rather than compared, because a touch
-    appearing in between can only make the predicate stricter."""
+    """`AND NOT EXISTS (SELECT 1 FROM public.scheduled_touches other
+    WHERE other.contact_id = t.contact_id AND other.funnel_id <> t.funnel_id
+    AND other.status = 'sent' AND other.sent_at > now() - $funnel_cooldown)` —
+    recomputed rather than compared, because a touch appearing in between can
+    only make the predicate stricter."""
 
     tier_limit_24h: int | None
     tier_usage_24h: int
-    """`AND (ca.meta_tier IS NULL OR ca.tier_usage_24h < 0.8 * ca.meta_tier)`"""
+    """`AND NOT EXISTS (SELECT 1 FROM public.conversations c
+    JOIN public.channels_accounts ca ON ca.id = c.channel_account_id
+    WHERE c.id = t.conversation_id AND ca.meta_tier IS NOT NULL
+    AND ca.tier_usage_24h >= $tier_pause_fraction * ca.meta_tier)` — the number
+    the touch would leave by. A NULL tier is Evolution, where the ceilings are
+    the sender's anti-ban ones instead (D10)."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -26,9 +26,10 @@ from agents_runtime.agent_core.review import Reviewer
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing.dispatcher import dispatch_pass, run_touch
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
-from agents_runtime.queueing.jobs import DomainEventJob, EvalJob, InboundJob
+from agents_runtime.queueing.jobs import DomainEventJob, EvalJob, InboundJob, ScheduledTouchJob
 from agents_runtime.queueing.sender import sender_pass
 from agents_runtime.queueing.tenant_slots import TenantSlots
 from agents_runtime.queueing.worker import TurnResult, run_turn
@@ -72,6 +73,28 @@ def evals_handler_for(review: Reviewer, slots: TenantSlots) -> Handler:
         finally:
             slots.release(job.tenant_id)
         return Ack.ARCHIVE
+
+    return handle
+
+
+def scheduled_handler_for(conn: psycopg.AsyncConnection, clock: Clock) -> Handler:
+    """The `q_scheduled` consumer — the only door a proactive touch leaves by.
+
+    Module level for the same reason as the evals handler: the wiring has to be
+    reachable through the door production uses, not rebuilt by a test.
+
+    Shaped after the domain event handler, with its two rules kept: outcomes are
+    DATA and archive (sent, cancelled with a reason, already finished), and no
+    tenant slot is taken because nothing here calls a model — the copy comes
+    from the approved cadence (D10; S7 adds the model and the permit together).
+    A malformed payload RAISES rather than being swallowed: this queue has
+    exactly one producer, in this same process, so a shape it cannot parse is a
+    bug of ours and belongs in the DLQ where somebody reads it.
+    """
+
+    async def handle(queue_name: str, message) -> Ack:
+        job = ScheduledTouchJob.from_payload(message.payload)
+        return await run_touch(conn, job, clock=clock)
 
     return handle
 
@@ -185,13 +208,33 @@ async def run(
         tasks.append(asyncio.create_task(coalescer(), name="coalescer"))
         tasks.append(asyncio.create_task(heartbeat(), name="heartbeat"))
 
+        # -- the dispatcher sweep: the second pulse of the process. Its own
+        # connection, unlike the coalescer's, because it opens a TRANSACTION
+        # (claim and enqueue commit together, or a touch is marked `enqueued`
+        # with no job to fire it) — and a transaction shared with the heartbeat
+        # would roll the heartbeat back with it.
+        #
+        # Started BEFORE the workers, and sweeping BEFORE its first sleep: a
+        # periodic task that sleeps first never runs at all on a process that
+        # crash-loops faster than its own tick, which is precisely the process
+        # whose overdue touches nobody is firing.
+        dispatch_conn = await _connect(dsn, worker_set_role)
+        connections.append(dispatch_conn)
+
+        async def dispatcher() -> None:
+            while not stop.is_set():
+                await dispatch_pass(dispatch_conn)
+                await _sleep_or_stop(clock, stop, config.dispatcher_tick.total_seconds())
+
+        tasks.append(asyncio.create_task(dispatcher(), name="dispatcher"))
+
         # -- workers: one connection and one loop each, so a slow turn on one
         # never blocks a claim on another (and cenários B get real concurrency).
         for index in range(workers):
             conn = await _connect(dsn, worker_set_role)
             connections.append(conn)
 
-            queue_names = {INBOUND, DOMAIN_EVENTS, *(extra_handlers or {})}
+            queue_names = {INBOUND, DOMAIN_EVENTS, SCHEDULED, *(extra_handlers or {})}
             if review is not None:
                 # Absent means the queue is not even polled: the evaluations
                 # pile up visibly instead of being read and thrown away. Same
@@ -203,6 +246,7 @@ async def run(
             handlers: dict[str, Handler] = {
                 INBOUND: await inbound_handler_for(conn, queues),
                 DOMAIN_EVENTS: domain_handler_for(conn),
+                SCHEDULED: scheduled_handler_for(conn, clock),
             }
             if review is not None:
                 handlers[EVALS] = evals_handler_for(review, slots)
