@@ -23,6 +23,11 @@ Function do conector (E8) — ou a demo, chamando `ingest_webhook` diretamente.
 Desfechos são dados, não exceções: `applied`, `already_applied`, `discarded`,
 `invalid_payload`, `no_channel`, `no_funnel`. Exceção fica reservada para o que
 É bug.
+
+**S10 — a contração.** As chamadas deste arquivo passavam pelo shim N-1 de duas
+casas; ele foi removido e elas passaram a ser as de uma casa, que é a que o
+`app.py` faz. Ver `apply_event` abaixo: os invariantes são os mesmos, o caminho
+até eles é que ficou único.
 """
 
 import psycopg
@@ -36,17 +41,25 @@ from tests.db.factories import (
     unique_phone,
 )
 
-#: O texto aposentado. Continua aqui como argumento da forma de duas casas da
-#: função — o shim N-1 do expand-contract, que o ignora desde o S3. Chamar por
-#: ele é o que mantém estas provas exercitando o caminho que a imagem anterior
-#: do runtime ainda usa durante um deploy.
-TOUCH = "Vimos que ficou algo no seu carrinho! Posso ajudar a finalizar? 🧡"
 
+def apply_event(conn: psycopg.Connection, event_id: int) -> tuple:
+    """Chama a função e devolve o outcome como tupla (status, conversa, outbox).
 
-def apply_event(conn: psycopg.Connection, event_id: int, text: str = TOUCH) -> tuple:
-    """Chama a função e devolve o outcome como tupla (status, conversa, outbox)."""
+    **S10 — a contração.** Até aqui esta função chamava a forma de DUAS casas,
+    o shim N-1 que o S3 deixou para a imagem anterior do runtime sobreviver ao
+    deploy, passando o texto aposentado que ele ignorava. O shim foi removido
+    (`20260806000012_contract_domain_event_shim.sql`), então a chamada é a de
+    uma casa — a mesma que o `app.py` faz.
+
+    **Nenhum invariante deste arquivo mudou.** Os quatro desfechos que ele prova
+    — tipo não suportado descartado com rastro, payload sem telefone falhando
+    visivelmente e sem escrever nada, tenant sem número ativo em `no_channel`, e
+    um id de evento inexistente LEVANTANDO em vez de virar desfecho — são
+    desfechos da função de uma casa e sempre foram: o shim nunca fez mais do que
+    repassar. O que morreu foi um caminho até ela, não uma afirmação sobre ela.
+    """
     return conn.execute(
-        "select * from internal.apply_domain_event(%s, %s)", (event_id, text)
+        "select * from internal.apply_domain_event(%s)", (event_id,)
     ).fetchone()
 
 
@@ -193,13 +206,14 @@ def test_a_job_pointing_at_no_event_raises(admin: psycopg.Connection) -> None:
 
 
 # --- quem pode chamar ----------------------------------------------------------
-
-
-def test_the_touch_is_not_executable_by_everyone(dsn: str) -> None:
-    # SECURITY DEFINER que escreve atravessando tenants: EXECUTE mínimo. O
-    # worker toca (teste do caminho feliz); ingestão, sender e Data API não.
-    for role in ("authenticated", "sender_role", "ingestion_role"):
-        with psycopg.connect(dsn) as conn:
-            conn.execute(f"set role {role}")
-            with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                conn.execute("select * from internal.apply_domain_event(1, 'x')")
+#
+# `test_the_touch_is_not_executable_by_everyone` vivia aqui e afirmava o EXECUTE
+# mínimo (ADR-11) sobre a assinatura de DUAS casas — o shim N-1, removido na
+# contração do S10. O invariante não mudou e não ficou sem prova: ele está,
+# palavra por palavra e sobre a assinatura que sobrou, em
+# `tests/db/test_start_funnel_run.py::test_neither_function_is_executable_by_everyone`,
+# que percorre os mesmos três papéis (`authenticated`, `sender_role`,
+# `ingestion_role`) contra `internal.apply_domain_event(1)` e contra
+# `internal.start_funnel_run(...)`. Reescrevê-lo aqui apontando para a mesma
+# chamada seria uma segunda cópia da mesma afirmação: duas provas para um
+# invariante não o provam duas vezes, só dobram o custo de mudá-lo.
