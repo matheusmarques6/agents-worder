@@ -1,9 +1,13 @@
 """Composition root — the single asyncio process of ADR-1/2, assembled.
 
-Five kinds of task share one process and one stop event:
+Every task below shares one process and one stop event:
 
   · the coalescer tick — the only origin of inbound jobs;
   · N workers — each an EngineLoop consuming the queues it has handlers for;
+  · the dispatcher sweep — due proactive touches become jobs;
+  · the silence sweep — three ignored funnels become a suppression;
+  · the reconciliation sweep — the poll that catches what a webhook lost;
+  · the health sweep — the milestone's silent failures become alerts;
   · the sender — drains the outbox through the channel port;
   · the heartbeat — proof 3 of the milestone, born observable.
 
@@ -32,6 +36,7 @@ from agents_runtime.dispatch.variation import CopyVariator
 from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
 from agents_runtime.queueing.dispatcher import dispatch_pass, run_touch
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
+from agents_runtime.queueing.health import health_pass
 from agents_runtime.queueing.jobs import DomainEventJob, EvalJob, InboundJob, ScheduledTouchJob
 from agents_runtime.queueing.sender import sender_pass
 from agents_runtime.queueing.suppression import silence_pass
@@ -265,6 +270,29 @@ async def run(
                 await _sleep_or_stop(clock, stop, config.silence_sweep_tick.total_seconds())
 
         tasks.append(asyncio.create_task(silence(), name="silence-sweep"))
+
+        # -- the health sweep (E3 S11): the milestone's silent failures become
+        # rows in `public.alerts`. Its own connection for the same reason the two
+        # above have one — it opens a transaction, and two tasks opening
+        # transactions on one connection is one transaction with two owners.
+        #
+        # It observes and never repairs. In particular it does not put a stuck
+        # touch back to `pending`: that would be a second clock over the same
+        # rows the dispatcher owns, and a second clock can resend what already
+        # went out.
+        health_conn = await _connect(dsn, worker_set_role)
+        connections.append(health_conn)
+
+        async def health() -> None:
+            while not stop.is_set():
+                await health_pass(
+                    health_conn,
+                    touch_stuck_after=config.touch_stuck_after,
+                    sync_error_after=config.sync_error_after,
+                )
+                await _sleep_or_stop(clock, stop, config.health_sweep_tick.total_seconds())
+
+        tasks.append(asyncio.create_task(health(), name="health-sweep"))
 
         # -- the reconciliation sweep (ADR-3, S8): the poll that catches what a
         # webhook lost. Only when adapters exist, the same doctrine as the
