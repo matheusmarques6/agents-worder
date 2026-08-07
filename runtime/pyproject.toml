@@ -47,6 +47,7 @@ markers = [
     "rls: cross-tenant leak suite, run with all three credentials (JWT, worker_role, sender_role)",
     "pipeline: full runtime loop + Postgres + pgmq; LLM and external APIs simulated",
     "contract: ONE real external API. Never blocking on a PR",
+    "load: burst against the real composition (plano-de-testes §5.1 nº 7). Never blocking on a PR",
 ]
 
 # --- Lint --------------------------------------------------------------------

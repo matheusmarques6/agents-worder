@@ -20,6 +20,11 @@ _LEVEL_BY_DIRECTORY = {
     "db": "db",
     "pipeline": "pipeline",
     "contract": "contract",
+    # E3 S10: the load suite (plano-de-testes §5.1 nº 7) gets a level for the
+    # same reason the others have one — so that it can never be swept into a
+    # blocking lane by accident, and so `--strict-markers` refuses a directory
+    # nobody declared.
+    "load": "load",
 }
 
 _TESTS_ROOT = Path(__file__).parent
