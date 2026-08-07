@@ -16,7 +16,7 @@ from typing import Any
 
 import psycopg
 
-from agents_runtime.agent_core.llm import EMBEDDING_MODEL, EmbedderPort
+from agents_runtime.agent_core.llm import EMBEDDING_MODEL, EmbedderPort, ToolSpec
 from agents_runtime.repository import knowledge as knowledge_repo
 from agents_runtime.repository.scope import scope_to_tenant
 from agents_runtime.tools.base import ToolContext, ToolResult, require_text
@@ -28,6 +28,24 @@ DEFAULT_LIMIT = 5
 
 class SearchKnowledge:
     name = "search_knowledge"
+    spec = ToolSpec(
+        name="search_knowledge",
+        description=(
+            "Busca na base de conhecimento da loja (FAQ, políticas de frete, "
+            "troca e devolução) o trecho que responde a uma pergunta."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "A pergunta do cliente, com as palavras dele.",
+                }
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    )
 
     def __init__(self, embedder: EmbedderPort, *, limit: int = DEFAULT_LIMIT) -> None:
         self._embedder = embedder

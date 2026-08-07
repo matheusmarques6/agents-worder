@@ -18,11 +18,17 @@ import psycopg
 
 from agents_runtime.repository import contacts as contacts_repo
 from agents_runtime.repository.scope import scope_to_tenant
-from agents_runtime.tools.base import ToolContext, ToolResult
+from agents_runtime.tools.base import ToolContext, ToolResult, no_arguments
 
 
 class GetCustomerContext:
     name = "get_customer_context"
+    spec = no_arguments(
+        "get_customer_context",
+        "Consulta quem é o cliente desta conversa: nome, idioma, desde quando "
+        "compra na loja e o histórico de pedidos dele. Não recebe argumentos — "
+        "é sempre o contato desta conversa.",
+    )
 
     async def __call__(
         self,
@@ -57,5 +63,25 @@ class GetCustomerContext:
                     facts.last_message_at.isoformat() if facts.last_message_at else None
                 ),
                 "conversations": facts.conversations,
+                "orders": _history(facts.orders),
             },
         )
+
+
+def _history(orders: contacts_repo.OrderHistory | None) -> dict[str, Any] | None:
+    """`null` when this contact was never linked to a store customer.
+
+    Not `{"total": 0}` — that is a DIFFERENT customer, one the store knows and
+    who has bought nothing, and the prompt says something different about each
+    (decisão 81b). Money is text for the same reason it is everywhere else here.
+    """
+    if orders is None:
+        return None
+
+    return {
+        "total": orders.total_orders,
+        "avg_ticket": None if orders.avg_ticket is None else f"{orders.avg_ticket:.2f}",
+        "first_order_at": (
+            orders.first_order_at.date().isoformat() if orders.first_order_at else None
+        ),
+    }

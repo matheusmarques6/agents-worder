@@ -23,7 +23,14 @@ from collections.abc import Sequence
 
 import httpx
 
-from agents_runtime.agent_core.llm import ChatRequest, ChatResult, EmbeddingResult, Usage
+from agents_runtime.agent_core.llm import (
+    ChatRequest,
+    ChatResult,
+    EmbeddingResult,
+    Message,
+    ToolCall,
+    Usage,
+)
 
 BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -52,13 +59,25 @@ class OpenRouterLlm:
     async def chat(self, request: ChatRequest) -> ChatResult:
         body: dict = {
             "model": request.model,
-            "messages": [
-                {"role": message.role, "content": message.content} for message in request.messages
-            ],
+            "messages": [_wire_message(message) for message in request.messages],
             # Cost only comes back when it is asked for, and the trail records
             # what was billed instead of guessing from a price table.
             "usage": {"include": True},
         }
+        if request.tools:
+            # Only when there are any: the loop's last turn offers none on
+            # purpose, and "an empty list" is not the same request as "no list".
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": dict(tool.parameters),
+                    },
+                }
+                for tool in request.tools
+            ]
         if request.think:
             # Only when the gate said so: paying for reasoning on every reply is
             # exactly the cost the think-gate exists to avoid.
@@ -70,10 +89,14 @@ class OpenRouterLlm:
         if not choices:
             raise ValueError(f"openrouter: 2xx with no choice ({str(data)[:200]})")
 
+        message = choices[0]["message"]
         return ChatResult(
-            text=choices[0]["message"]["content"],
+            # A turn that asks for tools carries `content: null`, and null is
+            # not text: a None here is the word "None" reaching a customer.
+            text=message.get("content") or "",
             usage=_usage_of(data),
             model=data.get("model") or request.model,
+            tool_calls=_tool_calls_of(message),
         )
 
     async def embed(self, texts: Sequence[str], *, model: str) -> EmbeddingResult:
@@ -101,6 +124,47 @@ class OpenRouterLlm:
             raise RuntimeError(f"HTTP {response.status_code} {response.text[:300]}")
 
         return response.json()
+
+
+def _wire_message(message: Message) -> dict:
+    """The OpenAI message shape, and NOTHING the message does not carry.
+
+    An ordinary user turn must serialise exactly as it did in the E2 — a
+    `tool_calls: []` on every message is a different request to every provider
+    that reads it, and this adapter is the one place that could quietly change
+    what a plain reply costs.
+    """
+    wire: dict = {"role": message.role, "content": message.content}
+    if message.tool_calls:
+        wire["tool_calls"] = [
+            {
+                "id": call.id,
+                "type": "function",
+                # `arguments` goes back exactly as it came: it is the model's
+                # own text, and re-serialising it would change what the
+                # provider signed off on.
+                "function": {"name": call.name, "arguments": call.arguments},
+            }
+            for call in message.tool_calls
+        ]
+    if message.tool_call_id is not None:
+        wire["tool_call_id"] = message.tool_call_id
+    return wire
+
+
+def _tool_calls_of(message: dict) -> tuple[ToolCall, ...]:
+    """Only `function` calls. A provider that one day answers with another kind
+    is answering something this runtime cannot execute, and skipping it is
+    better than inventing a name for it."""
+    return tuple(
+        ToolCall(
+            id=call["id"],
+            name=call["function"]["name"],
+            arguments=call["function"].get("arguments") or "{}",
+        )
+        for call in (message.get("tool_calls") or [])
+        if call.get("type", "function") == "function"
+    )
 
 
 def _usage_of(data: dict) -> Usage:

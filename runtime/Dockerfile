@@ -26,6 +26,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # são as MESMAS que o pack de evals usa — duas cópias divergiriam.
 COPY evals/ ./evals/
 
+# A biblioteca de prompts de ocasião (E3 S9), pela mesma razão e com a mesma
+# ressalva: é ativo versionado, não código, e `default_directory()` a resolve a
+# partir do pacote instalado — `/app/prompts/occasions` aqui. Fora da imagem,
+# uma linha do docstring vira mentira no dia em que alguém a carregar.
+COPY prompts/ ./prompts/
+
 
 FROM python:3.13-slim-bookworm AS runtime
 
@@ -41,6 +47,7 @@ WORKDIR /app
 COPY --from=builder --chown=runtime:runtime /app/.venv /app/.venv
 COPY --from=builder --chown=runtime:runtime /app/src /app/src
 COPY --from=builder --chown=runtime:runtime /app/evals /app/evals
+COPY --from=builder --chown=runtime:runtime /app/prompts /app/prompts
 
 USER runtime
 

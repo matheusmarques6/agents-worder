@@ -16,11 +16,30 @@ from agents_runtime.agent_core.llm import EmbedderPort
 from agents_runtime.tools.base import Tool
 from agents_runtime.tools.consent import RecordOptout
 from agents_runtime.tools.customer import GetCustomerContext
+from agents_runtime.tools.handoff import EscalateToHuman
 from agents_runtime.tools.knowledge import SearchKnowledge
+from agents_runtime.tools.orders import GetOrder, GetTracking
 
-#: The catalogue of the milestone (plano E2 §4). Tools that reach orders arrive
-#: in E3, with the tables that make them possible.
-AVAILABLE = ("search_knowledge", "get_customer_context")
+#: The catalogue. It grew in the E3 S9 when the condition the E2 wrote down was
+#: satisfied — "tools that reach orders arrive in E3, WITH THE TABLES that make
+#: them possible", and `orders`/`customers` exist since migration
+#: `20260806000002`.
+#:
+#: The three new ones are picks and not `MANDATORY`, and the line between the
+#: two is whose right is being protected. `record_optout` is compulsory because
+#: the right it serves belongs to the CONTACT — a merchant switching it off
+#: would be switching off somebody else's ability to say no. Looking up an
+#: order protects nobody from the merchant; it is the merchant's own capability,
+#: and `core/dicionario-de-dados.md` §84 says so outright by defining
+#: `enabled_tools` as a subset of a leque that names `get_order` and
+#: `call_human`.
+AVAILABLE = (
+    "search_knowledge",
+    "get_customer_context",
+    "get_order",
+    "get_tracking",
+    "escalate_to_human",
+)
 
 #: Tools that are NOT a choice — the same principle that makes the Judge 1 model
 #: platform-fixed: a safety gate does not weaken by customer configuration
@@ -48,6 +67,9 @@ def build_registry(enabled: Iterable[str], *, embedder: EmbedderPort) -> dict[st
     builders = {
         "search_knowledge": lambda: SearchKnowledge(embedder),
         "get_customer_context": GetCustomerContext,
+        "get_order": GetOrder,
+        "get_tracking": GetTracking,
+        "escalate_to_human": EscalateToHuman,
     }
     return {name: builders[name]() for name in names}
 

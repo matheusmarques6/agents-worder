@@ -37,9 +37,30 @@ def test_an_unknown_tool_dies_at_composition() -> None:
 
 
 def test_the_catalogue_is_the_two_tools_of_the_milestone() -> None:
-    """Tools that reach orders arrive in E3 with the order tables. A third name
-    appearing here without its tables is the mistake this test catches."""
-    assert set(AVAILABLE) == {"search_knowledge", "get_customer_context"}
+    """A name appearing here without the tables it reads is the mistake this
+    test catches — and it is still exactly that.
+
+    Written in the E2 as two, with the condition stated: "tools that reach
+    orders arrive in E3, WITH the order tables". Migration
+    `20260806000002_e3_funnels_and_orders` brought `orders` and `customers`, so
+    the condition is satisfied and the E3 S9 tools joined (authorised edit).
+    The invariant did not move; what moved is that it is now met.
+
+    They are picks and not `MANDATORY`, because the line between the two is
+    whose right is protected: `record_optout` is compulsory since the right is
+    the CONTACT'S, and no merchant may switch off somebody else's ability to say
+    no. Looking up an order protects nobody from the merchant — it is the
+    merchant's own capability, and `core/dicionario-de-dados.md` §84 defines
+    `enabled_tools` as a subset of a leque that names `get_order` and
+    `call_human`.
+    """
+    assert set(AVAILABLE) == {
+        "search_knowledge",
+        "get_customer_context",
+        "get_order",
+        "get_tracking",
+        "escalate_to_human",
+    }
 
 
 def test_every_tool_answers_by_its_own_name() -> None:

@@ -26,7 +26,7 @@ import psycopg
 
 from agents_runtime.repository import consent as consent_repo
 from agents_runtime.repository.scope import scope_to_tenant
-from agents_runtime.tools.base import ToolContext, ToolResult
+from agents_runtime.tools.base import ToolContext, ToolResult, no_arguments
 
 #: `suppression_list.reason` — the vocabulary the ladder maps to
 #: `suppressed_optout`. Written once, here, next to the only writer of it.
@@ -38,6 +38,13 @@ CREATED_BY = "agent"
 
 class RecordOptout:
     name = "record_optout"
+    spec = no_arguments(
+        "record_optout",
+        "Registra que este contato NÃO quer mais receber mensagens da loja. Use "
+        "quando a pessoa pedir para parar, descadastrar, sair da lista ou não "
+        "ser mais incomodada. Não recebe argumentos — vale sempre para o contato "
+        "desta conversa.",
+    )
 
     async def __call__(
         self,
