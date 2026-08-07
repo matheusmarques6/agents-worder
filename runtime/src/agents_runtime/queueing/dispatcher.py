@@ -31,21 +31,40 @@ a synonym). If the second decision still allows, nothing is cancelled and the
 job comes back shortly: a fact we cannot name has no business being filed as a
 contact protection, and the queue's retry limit bounds the argument.
 
-No tenant slot is taken. The per-tenant semaphore of ADR-2 bounds concurrent LLM
-work, and there is none here — the copy comes from the approved cadence
-(`dispatch/copy.py`). S7 adds the model call and the permit in the same breath.
+**S7 — the copy, and the gate that replaced the judge.** Content is decided HERE
+and never in the sender, because `message_outbox.payload` is the final content to
+send, with anti-ban variation already applied (dicionário §5.3, D10). Two things
+follow, and both are conditions rather than defaults:
+
+  * variation happens only on **Evolution**. The Cloud sends a template a human
+    and Meta both approved, and varying that text would be varying the thing that
+    was approved as written (R3 of the plan);
+  * a variation that the deterministic validator rejects means the touch **does
+    not go out** (D3b). It raises, so the job climbs the retry ladder to the DLQ
+    — the same reading `copy.CadenceMissing` has, and for the same reason: a
+    rejected generation is OUR bug, not the contact being protected, and filing
+    it as a `cancel_reason` would grow the S11 metric a bucket that means "we
+    broke it".
+
+And the promise the earlier docstring made is kept: the tenant slot arrives WITH
+the model call. The permit is taken around the variation and nothing else — the
+cap of ADR-2 exists to bound concurrent LLM work, so it is held for exactly the
+part that is one.
 """
 
 import uuid
+from functools import partial
 from typing import Any
 
 import psycopg
 
+from agents_runtime.channels.routing import EVOLUTION
 from agents_runtime.clock import Clock
-from agents_runtime.dispatch import copy, ladder
+from agents_runtime.dispatch import copy, ladder, variation
 from agents_runtime.queueing import SCHEDULED
 from agents_runtime.queueing.engine_loop import Ack
 from agents_runtime.queueing.jobs import ScheduledTouchJob
+from agents_runtime.queueing.tenant_slots import TenantSlots
 from agents_runtime.repository import engine
 
 
@@ -84,7 +103,12 @@ async def dispatch_pass(
 
 
 async def run_touch(
-    conn: psycopg.AsyncConnection, job: ScheduledTouchJob, *, clock: Clock
+    conn: psycopg.AsyncConnection,
+    job: ScheduledTouchJob,
+    *,
+    clock: Clock,
+    variator: variation.CopyVariator | None = None,
+    slots: TenantSlots | None = None,
 ) -> Ack:
     # FASE 1 — the snapshot, in a transaction that closes before anything is
     # decided with it.
@@ -111,6 +135,18 @@ async def run_touch(
         snapshot.cadence, snapshot.touch_number, opt_status=snapshot.opt_status
     )
 
+    if variator is not None and snapshot.channel_type == EVOLUTION:
+        if slots is not None and not slots.try_acquire(job.tenant_id):
+            # A full tenant postpones the touch — the same answer the inbound
+            # handler gives, and for the same reason: a funnel burst must not be
+            # able to spend the whole process's budget on one store.
+            return Ack.RETRY_SHORT
+        try:
+            payload = await _varied(conn, job, snapshot, payload, variator)
+        finally:
+            if slots is not None:
+                slots.release(job.tenant_id)
+
     # FASE 3 — the compare-and-set. Everything the decision stood on, revalidated
     # inside the same short transaction as the insert.
     outcome = await _write(conn, job, decision.guards, payload)
@@ -123,6 +159,40 @@ async def run_touch(
     # A guard moved between deciding and writing, and NOTHING was written. The
     # facts are read again and the ladder — not the SQL — says what happened.
     return await _name_the_conflict(conn, job, clock)
+
+
+async def _varied(
+    conn: psycopg.AsyncConnection,
+    job: ScheduledTouchJob,
+    snapshot,
+    payload: dict[str, Any],
+    variator: variation.CopyVariator,
+) -> dict[str, Any]:
+    """The approved base, rewritten — or nothing sent at all.
+
+    `generated` flips to True with the text, in the same dict, because D3c wants
+    an audit that can separate model-written copy from an approved template and
+    that separation cannot be reconstructed afterwards.
+    """
+    base = payload["text"]
+    try:
+        text = await variation.vary(
+            base,
+            generate=partial(variator, previous=snapshot.last_touch_text),
+            previous=snapshot.last_touch_text,
+        )
+    except variation.CopyRejected as rejected:
+        # The touch does not go out. The alert is opened in its own short
+        # transaction FIRST, so that the raise below — which is what stops the
+        # send — cannot take the record of why with it.
+        async with conn.transaction():
+            await engine.scope_to_tenant(conn, job.tenant_id)
+            await engine.open_copy_violation_alert(
+                conn, job.tenant_id, job.scheduled_touch_id, rejected.violations
+            )
+        raise
+
+    return {**payload, "text": text, "generated": True}
 
 
 async def _name_the_conflict(

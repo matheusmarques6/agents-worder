@@ -112,9 +112,17 @@ def create_thread(
     tenant_id: uuid.UUID,
     *,
     origin_occasion: str = "direct",
+    # S7: a thread on a SPECIFIC number. Additive — absent still means "make one"
+    # — and it exists because the tier proof needs the proactive and the reactive
+    # to leave by the SAME account, which is the whole claim being made.
+    channel_account_id: uuid.UUID | None = None,
 ) -> Thread:
     contact_id = create_contact(conn, tenant_id)
-    channel = create_channel_account(conn, tenant_id)
+    channel = (
+        ChannelAccount(id=channel_account_id, phone_e164="", external_account_id="")
+        if channel_account_id is not None
+        else create_channel_account(conn, tenant_id)
+    )
 
     with conn.cursor() as cur:
         cur.execute(
@@ -171,6 +179,10 @@ def create_outbox_item(
     thread: Thread,
     *,
     status: str = "pending",
+    # S7: `kind` decides whether a row is a proactive one, and the whole
+    # anti-ban asymmetry hangs on that. Additive with the value every existing
+    # caller already got, so nothing that came before can read differently.
+    kind: str = "reply",
 ) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
@@ -178,7 +190,7 @@ def create_outbox_item(
             insert into internal.message_outbox
                 (tenant_id, conversation_id, contact_id, channel_account_id,
                  kind, payload, idempotency_key, status)
-            values (%s, %s, %s, %s, 'reply', %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
             returning id
             """,
             (
@@ -186,6 +198,7 @@ def create_outbox_item(
                 thread.conversation_id,
                 thread.contact_id,
                 thread.channel_account_id,
+                kind,
                 psycopg.types.json.Jsonb({"text": "resposta"}),
                 unique_id("idem"),
                 status,

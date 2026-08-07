@@ -26,6 +26,7 @@ from agents_runtime.agent_core.review import Reviewer
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.dispatch.variation import CopyVariator
 from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
 from agents_runtime.queueing.dispatcher import dispatch_pass, run_touch
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
@@ -78,24 +79,34 @@ def evals_handler_for(review: Reviewer, slots: TenantSlots) -> Handler:
     return handle
 
 
-def scheduled_handler_for(conn: psycopg.AsyncConnection, clock: Clock) -> Handler:
+def scheduled_handler_for(
+    conn: psycopg.AsyncConnection,
+    clock: Clock,
+    *,
+    variator: CopyVariator | None = None,
+    slots: TenantSlots | None = None,
+) -> Handler:
     """The `q_scheduled` consumer — the only door a proactive touch leaves by.
 
     Module level for the same reason as the evals handler: the wiring has to be
     reachable through the door production uses, not rebuilt by a test.
 
     Shaped after the domain event handler, with its two rules kept: outcomes are
-    DATA and archive (sent, cancelled with a reason, already finished), and no
-    tenant slot is taken because nothing here calls a model — the copy comes
-    from the approved cadence (D10; S7 adds the model and the permit together).
-    A malformed payload RAISES rather than being swallowed: this queue has
-    exactly one producer, in this same process, so a shape it cannot parse is a
-    bug of ours and belongs in the DLQ where somebody reads it.
+    DATA and archive (sent, cancelled with a reason, already finished). A
+    malformed payload RAISES rather than being swallowed: this queue has exactly
+    one producer, in this same process, so a shape it cannot parse is a bug of
+    ours and belongs in the DLQ where somebody reads it.
+
+    S7 adds the model and the permit together, as the earlier version of this
+    docstring promised: `variator` is the anti-ban copy variation, and `slots` is
+    the ADR-2 cap that now has something to bound. Both absent means the copy is
+    the approved cadence verbatim, which is what a Cloud-only deployment gets
+    anyway — the variation only ever applies on Evolution.
     """
 
     async def handle(queue_name: str, message) -> Ack:
         job = ScheduledTouchJob.from_payload(message.payload)
-        return await run_touch(conn, job, clock=clock)
+        return await run_touch(conn, job, clock=clock, variator=variator, slots=slots)
 
     return handle
 
@@ -130,6 +141,7 @@ async def run(
     respond: Responder | None = None,
     review: Reviewer | None = None,
     channel: ChannelPort | None = None,
+    variator: CopyVariator | None = None,
     extra_handlers: Mapping[str, Handler] | None = None,
     process_name: str = APPLICATION_NAME,
     workers: int = 2,
@@ -265,7 +277,9 @@ async def run(
             handlers: dict[str, Handler] = {
                 INBOUND: await inbound_handler_for(conn, queues),
                 DOMAIN_EVENTS: domain_handler_for(conn),
-                SCHEDULED: scheduled_handler_for(conn, clock),
+                SCHEDULED: scheduled_handler_for(
+                    conn, clock, variator=variator, slots=slots
+                ),
             }
             if review is not None:
                 handlers[EVALS] = evals_handler_for(review, slots)
@@ -291,7 +305,13 @@ async def run(
 
             async def sender() -> None:
                 while not stop.is_set():
-                    await sender_pass(sender_conn, channel, config=config, randomness=randomness)
+                    await sender_pass(
+                        sender_conn,
+                        channel,
+                        config=config,
+                        randomness=randomness,
+                        clock=clock,
+                    )
                     await _sleep_or_stop(clock, stop, config.sender_poll.total_seconds())
 
             tasks.append(asyncio.create_task(sender(), name="sender"))

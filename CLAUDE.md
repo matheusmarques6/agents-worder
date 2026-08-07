@@ -46,7 +46,7 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 - **Webhook idempotency includes the source account:** `UNIQUE (source, source_account_id, external_event_id)` — platforms with per-store sequential IDs would otherwise mask each other's events.
 - **Cross-tenant access only via `SECURITY DEFINER` claim functions** (e.g. `claim_outbox_batch`) with fixed `search_path`, EXECUTE revoked from PUBLIC. App roles (`worker_role`, `sender_role`) have RLS, separate pools, no `BYPASSRLS`; secrets only through scoped functions, never a general grant on Vault views.
 - **Module boundaries are enforced** (CI fails if e.g. `channels` imports `connectors`); SQL only in the repository layer; internal tables (outbox, pgmq queues, evals) stay out of the Data API schema.
-- **Every agent response passes Judge 1 before sending — no exceptions, including load tests.**
+- **Every REACTIVE agent response passes Judge 1 before sending — no exceptions, including load tests.** Proactive copy (funnel touches, campaigns) does NOT: Judge 1 belongs to real time (D3, Bruno, 2026-08-06). What stands in its place is a **pure deterministic copy validator** (`dispatch/variation.py`): the anti-ban variation may only vary the human-approved `copy_base` and may **not introduce a number, a deadline, a link or a promise the base does not carry**. A violation means the touch is NOT sent and a row is opened in `alerts`; the outbox item records `payload.generated: true|false`. **Residual risk, accepted and recorded** (`arquitetura §5.5`): this is the only place in the product where model-written text reaches a contact with no LLM gate in front of it — the validator checks form, never intention.
 - **LGPD:** secondary use of conversations (training/benchmarks) is SUSPENDED (ADR-12); cancelled-merchant purge is hard delete with no copy. Default is NOT to collect CPF/birthdate.
 
 ## Runtime discipline
@@ -80,8 +80,9 @@ Any code written here must respect these; the fitness functions in §8 of the ar
 | Polling weights | 8:4:2:1 · aging: domain > 2 min, scheduled > 10 min |
 | Per-tenant semaphore | 3 concurrent |
 | Proactive rate limits | default 1/contact/24h · platform ceiling 4/contact/24h (loosening is admin-only, per tenant; merchants can only tighten) · no per-funnel touch cap (funnel cadence config decides) · 72h between funnels · auto-suppress after 3 unanswered |
-| Evolution anti-ban | jitter 30–120 s · warm-up 20→50→100 · hard cap 300/day · copy never repeats the last one |
-| Meta tier | pause proactives at 80% + alert |
+| Evolution anti-ban | jitter 30–120 s · warm-up 20→50→100 · hard cap 300/day · copy never repeats the last one · **risk acceptance (`channels_accounts.risk_accepted_at` + `audit_log`) required before the first proactive send**. Rhythm is the SENDER's, copy variation is the DISPATCH's (D10) — the sender never composes text |
+| Copy variation regeneration limit | 2 · exhausted → the touch is NOT sent + row in `alerts` (same ceiling as Judge 1 pre-send) |
+| Meta tier | pause proactives at 80% + alert. **Reactive replies never pause** (RF-034) — the tier gate lives in `dispatch/ladder.py`, whose input type is `ProactiveTouch`, and a reactive reply never reaches it |
 | Message retention | rolling TTL 12–24 months (tenant config, default 12) · cancelled-merchant purge: hard delete after 10 days |
 | Revenue attribution | order paid ≤ 24h after a touch (tenant-configurable) |
 | LLM routing | everything (chat + embedding) through **OpenRouter**, OpenAI-compatible adapter, model as a string |

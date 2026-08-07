@@ -267,7 +267,15 @@ Evento com idade > 5 min: mensagem mais recente depois do evento? Pedido pago? C
 - Cloud API: token bucket por número no tier da Meta; a 80%, pausa proativos + alerta.
 
 ### 5.5 Anti-ban (Evolution)
-Variação de copy por LLM a cada disparo; jitter 30–120s por número; warm-up crescente (20→50→100...); teto duro diário (default 300); aceite do risco em `audit_log`.
+Variação de copy por LLM a cada disparo; jitter 30–120s por número; warm-up crescente (20→50→100...); teto duro diário (default 300); aceite do risco em `audit_log` (exigido **antes do primeiro envio proativo** pelo canal).
+
+**Onde cada metade mora (D10 do E3):** ritmo de entrega — jitter, warm-up, teto diário — é do **sender**, o único que fala com a API (ADR-8). Variação de copy é conteúdo e é do **dispatch**, decidida **antes** da outbox, porque `message_outbox.payload` é o conteúdo final a enviar. Misturar as duas faria o sender gerar texto, e um sender que gera texto passa a precisar de modelo, de tenant e de juiz.
+
+**O portão da copy variada (D3, decisão do Bruno em 2026-08-06).** O Judge 1 é do tempo real: **toda resposta reativa passa pelo Judge 1 pré-envio, sem exceção**; **disparo e campanha não passam por ele**. No lugar do juiz, a variação anti-ban responde a um **validador determinístico e puro**: ela só pode variar o `copy_base` aprovado por um humano e **não pode introduzir número, prazo, link ou promessa que a base não tenha**. Violação → o toque **não sai** e abre linha em `alerts`. O item da outbox grava `payload.generated: true|false`, para a auditoria separar copy gerada de template aprovado.
+
+**Risco residual, registrado e aceito.** Este é o **único ponto do produto** em que texto escrito por um modelo alcança um contato sem portão de LLM na frente. O validador é determinístico e a base é aprovada por humano, mas ele confere **forma, não intenção**: um texto educado, verdadeiro em forma e errado em conteúdo passa. A mitigação existente é a estreiteza da variação (reescrever, não redigir) e a auditoria pós-envio; a mitigação que não existe é semântica.
+
+Na Cloud não há variação: o toque sai no template que o humano e a Meta aprovaram, e variar aquele texto seria variar exatamente o que foi aprovado como está.
 
 ### 5.6 Onboarding e gate duplo
 Admin cadastra → link do formulário (define quem conecta o número) → cliente conecta loja (OAuth) e WhatsApp no próprio formulário, antes de existir conta → agente gerador cria `agent_versions` draft, conectado porém pausado → Bruno testa e aprova → cliente testa, ajusta e aprova → ativa → e-mail → senha → hub → shadow de 7 dias (100% avaliado, sem reter envio).
