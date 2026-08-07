@@ -17,6 +17,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from agents_runtime.connectors.port import PlatformEvent, SyncTarget
+from agents_runtime.obs.context import Carrier
 
 
 async def claim_sync_targets(
@@ -66,7 +67,11 @@ async def finish_sync(
 
 
 async def ingest_polled_event(
-    conn: psycopg.AsyncConnection, target: SyncTarget, event: PlatformEvent
+    conn: psycopg.AsyncConnection,
+    target: SyncTarget,
+    event: PlatformEvent,
+    *,
+    otel: Carrier | None = None,
 ) -> str:
     """Hand a polled fact to the ingestion — the SAME door the webhook uses.
 
@@ -75,18 +80,30 @@ async def ingest_polled_event(
     means the webhook already delivered this, which is what a safety belt
     mostly discovers.
 
-    Nothing about the caller travels in the arguments. The tenant is resolved
-    inside, from the store — a `tenant_id` chosen by the poll would be the
-    trust boundary broken from the inside, where nobody is looking.
+    Nothing about the caller travels in the arguments — with one deliberate
+    exception. The tenant is resolved inside, from the store, because a
+    `tenant_id` chosen by the poll would be the trust boundary broken from the
+    inside, where nobody is looking. `otel` is different in kind: it is not a
+    fact about the data, it is the W3C context of the sweep that knocked, and it
+    goes into the `q_domain_events` job so that "store X was reconciled" and "Y's
+    funnel was cancelled because the order was paid" are one trace instead of
+    two.
+
+    `p_otel =>` is named notation, and it is not style: `p_debounce` sits between
+    the two in the signature, and reaching past it positionally would mean
+    writing the canonical 10s debounce here — a second copy of a number that
+    lives in `QueueingConfig`, free to disagree with the first. Named notation
+    lets the database's own default answer for it.
     """
     cursor = await conn.execute(
-        "select status from internal.ingest_webhook(%s, %s, %s, %s, %s)",
+        "select status from internal.ingest_webhook(%s, %s, %s, %s, %s, p_otel => %s)",
         (
             target.platform,
             target.source_account_id,
             event.external_event_id,
             event.event_type,
             Jsonb(dict(event.payload)),
+            Jsonb(dict(otel)) if otel else None,
         ),
     )
     return (await cursor.fetchone())[0]

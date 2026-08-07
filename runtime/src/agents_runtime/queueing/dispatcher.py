@@ -61,6 +61,7 @@ import psycopg
 from agents_runtime.channels.routing import EVOLUTION
 from agents_runtime.clock import Clock
 from agents_runtime.dispatch import copy, ladder, variation
+from agents_runtime.obs.context import TraceSource, no_trace_context
 from agents_runtime.queueing import SCHEDULED
 from agents_runtime.queueing.engine_loop import Ack
 from agents_runtime.queueing.jobs import ScheduledTouchJob
@@ -80,10 +81,24 @@ class UndeliverableTouch(RuntimeError):
 
 
 async def dispatch_pass(
-    conn: psycopg.AsyncConnection, *, limit: int = 100, queue: str = SCHEDULED
+    conn: psycopg.AsyncConnection,
+    *,
+    limit: int = 100,
+    queue: str = SCHEDULED,
+    trace: TraceSource = no_trace_context,
 ) -> int:
-    """One sweep of the due touches. Returns how many became jobs."""
+    """One sweep of the due touches. Returns how many became jobs.
+
+    `trace` is the seam of `CLAUDE.md`'s "`traceparent` travels inside queue
+    payloads": the sweep stamps every job it creates with the context of the tick
+    that created it, so the span of a touch is a child of the sweep rather than
+    an orphan root. It is a callable, and its default says the honest thing —
+    nothing is instrumented yet, because the SDK and the exporter depend on
+    Logfire and Grafana Cloud (pendências B-2/B-3). The context is read ONCE per
+    pass: every job of one sweep belongs to that one sweep.
+    """
     worker_id = uuid.uuid4()
+    context = trace()
 
     # One transaction around both: the claim that marks `enqueued` and the sends
     # that make the work findable. Neither survives the other's failure.
@@ -96,6 +111,7 @@ async def dispatch_pass(
                 ScheduledTouchJob(
                     scheduled_touch_id=touch.scheduled_touch_id,
                     tenant_id=touch.tenant_id,
+                    otel=context,
                 ).to_payload(),
             )
 

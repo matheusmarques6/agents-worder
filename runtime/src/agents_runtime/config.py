@@ -68,6 +68,25 @@ class QueueingConfig:
     reconcile_tick: timedelta = timedelta(minutes=5)
     reconcile_stale_after: timedelta = timedelta(minutes=15)
 
+    # A varredura de saúde (E3 S11): as três falhas silenciosas do marco viram
+    # linha em `public.alerts`. Cinco minutos porque nenhuma delas é urgente no
+    # sentido de segundos — todas já aconteceram quando a varredura passa, e o
+    # que a varredura muda é quanto tempo alguém leva para SABER.
+    health_sweep_tick: timedelta = timedelta(minutes=5)
+
+    # Quanto tempo um toque pode ficar `enqueued` antes de ser dado como preso.
+    # DECISÃO, e derivada: a `q_scheduled` tenta 3 vezes com a escada de backoff
+    # (30s, 2min, 8min), então um job vivo termina — ou vai para a DLQ — em
+    # ~10 minutos. Trinta é o triplo disso: passado esse prazo o toque não está
+    # esperando, está perdido.
+    touch_stuck_after: timedelta = timedelta(minutes=30)
+
+    # Há quanto tempo uma loja precisa vir falhando para virar alerta. O plano
+    # pede "mais de N tiques"; com `reconcile_tick` de 5 minutos, uma hora são
+    # doze passes falhados seguidos — muito além do soluço de plataforma que o
+    # cinto de segurança do ADR-3 absorve sozinho por repetição.
+    sync_error_after: timedelta = timedelta(hours=1)
+
     # A escada da arquitetura: 30s, 2min, 8min… O teto não morde nos limites
     # atuais (cinco tentativas param em ~34 min); existe para o dia em que um
     # limite subir sem ninguém reler esta conta.
@@ -142,6 +161,9 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
         silence_sweep_tick=_ms("AGENTS_SILENCE_TICK_MS", base.silence_sweep_tick),
         reconcile_tick=_ms("AGENTS_RECONCILE_TICK_MS", base.reconcile_tick),
         reconcile_stale_after=_ms("AGENTS_RECONCILE_STALE_MS", base.reconcile_stale_after),
+        health_sweep_tick=_ms("AGENTS_HEALTH_TICK_MS", base.health_sweep_tick),
+        touch_stuck_after=_ms("AGENTS_TOUCH_STUCK_MS", base.touch_stuck_after),
+        sync_error_after=_ms("AGENTS_SYNC_ERROR_MS", base.sync_error_after),
         busy_retry=_ms("AGENTS_BUSY_RETRY_MS", base.busy_retry),
         idle_pause=_ms("AGENTS_IDLE_PAUSE_MS", base.idle_pause),
         sender_poll=_ms("AGENTS_SENDER_POLL_MS", base.sender_poll),

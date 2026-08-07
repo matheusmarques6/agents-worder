@@ -129,6 +129,18 @@ Cenário 11 do §3.3 inteiro (pagamento cancela · supressão bloqueia · evento
 ### S11 · Observabilidade do marco (0,5–1d, condicional a B-2/B-3)
 Métricas: toques agendados/enviados/**cancelados por motivo** (é o motivo que diagnostica, não o total), conversões atribuídas, uso do tier, estágio de warm-up, profundidade da `q_scheduled` e sua DLQ. Alertas de tier a 80% e de `channels_accounts.status='banned'` com log + métrica + alerta no mesmo `trace_id`. PII nunca (nem telefone, nem conteúdo de toque).
 
+**Executado em 2026-08-06, na metade que não depende de credencial** — mesmo tratamento do E1 e do E2: o que não precisa de rede fecha, o que precisa fica pendente e explícito.
+
+*Fechado:*
+- **Os alertas in-app.** O de tier a 80% **já existia desde o S7** (`internal.record_channel_send`, um por travessia, com teste de PII) — a premissa de que faltava estava errada. Entraram os três que faltavam de fato, numa varredura só (`internal.sweep_health_alerts`, tarefa periódica do processo, `worker_role`): **`touch_stuck`** (toque em `enqueued` além de 30 min — alerta de IDADE, e a migration não tem um único `UPDATE` em `scheduled_touches`, porque um segundo relógio poderia reenviar o que já saiu), **`channel_banned`** e **`connector_error`** (tipo que existia no CHECK desde o E2 e nunca teve escritor). Deduplicação por alerta ABERTO equivalente. Sem PII, com teste de vazamento em cada bloco.
+- **`connector_accounts.sync_error_since`**, nova, com escritor no mesmo commit (`finish_sync`): "persistente" não cabia em `last_sync_at`, que avança inclusive nos passes que falham.
+- **Quatro views de métrica** em `public`, `security_invoker = true`: `metrics_touches` (por desfecho e por motivo), `metrics_stuck_touches`, `metrics_conversions`, `metrics_channel_health`. RLS provada nos dois sentidos (lojista, worker, `anon`). `channels_accounts` ganha GRANT **por coluna** para `authenticated`, para não levar telefone e referência do Vault à Data API.
+- **O `traceparent` atravessando as filas novas.** O slot `otel` existia desde o E1 e nunca teve produtor: `dispatch_pass` e `reconcile_pass` recebem uma `TraceSource`, e `internal.ingest_webhook` ganha `p_otel` (último parâmetro, com default; DROP e recreate, senão a chamada de cinco argumentos da Edge Function ficaria ambígua).
+
+*Pendente de B-2/B-3, nomeado:* exportador OTLP, SDK do Logfire, compose com Alloy, redação de PII no processor, spans de custo a partir de `llm_calls`, profundidade de fila/DLQ como métrica, e o **cenário 14** (mesmo `trace_id` nos dois backends). A `TraceSource` é o ponto único onde tudo isso se pluga.
+
+*Dívida nomeada, fora do escopo do passo:* `channels_accounts.status = 'banned'` **não tem escritor automático** — hoje quem marca é operação (e o hub, no E5/E6). A detecção pelo provedor é uma das perguntas que só a suíte `contract` da Evolution pode responder (ver `channels/evolution.py`). O alerta é o leitor; o escritor automático continua faltando.
+
 ### S12 · Provas de conclusão
 1. **Simulação do dia real**, ponta a ponta, num tenant sintético: abandono → funil com cadência → contato responde → toques futuros morrem e a conversa vira suporte normal (E2) → pedido pago dentro da janela → conversão atribuída; em paralelo, um contato que bloqueia é suprimido e um pagamento cancela um funil ativo.
 2. **A5 + A6 verdes**, cenário 11 verde, suíte completa verde.
@@ -150,6 +162,7 @@ Os docs são a fonte da verdade — cada item entra no **mesmo PR** do passo que
 | `arquitetura §5.4` | registrar onde o teto é materializado e quem pode afrouxá-lo | S2 |
 | `ordem-de-execucao.md §E3` | estimativa 7–10 → 17 dias (escopo completo), com o porquê (§9) | S0 |
 | `CLAUDE.md` (invariantes) + `arquitetura §5.5` + `requisitos RF-015` | "toda resposta passa pelo Judge 1" → **"toda resposta reativa"**; disparo e campanha respondem ao validador determinístico de copy (D3) | S7 |
+| `dicionario-de-dados.md` | `connector_accounts.sync_error_since` (§3.2) · os três tipos novos de `alerts` e **a tabela de quem escreve cada tipo** — a lista existe porque tipo de alerta sem escritor é proteção decorativa, e seis dos doze continuam sem um · §6.6 com as quatro views de métrica · o `otel` nos payloads de fila (§5.2) | S11 |
 
 ## 9. Por que a estimativa cresce (honestidade sobre o calendário)
 

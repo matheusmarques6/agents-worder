@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from agents_runtime.obs import context
+
 
 @dataclass(frozen=True, slots=True)
 class InboundJob:
@@ -89,11 +91,18 @@ class ScheduledTouchJob:
         """The shape the claim task sends. Written here, next to the parser, so
         the producer and the consumer of this queue cannot disagree — the
         coalescer's payload is built in SQL and this one is not, which would
-        otherwise leave the two halves in different files."""
-        return {
-            "scheduled_touch_id": str(self.scheduled_touch_id),
-            "tenant_id": str(self.tenant_id),
-        }
+        otherwise leave the two halves in different files.
+
+        `otel` appears only when there IS a context to carry (`obs.context`): the
+        rule of this queue is that only ids travel, and a fixed `"otel": null`
+        would be a key that asserts nothing riding on every job for ever."""
+        return context.stamp(
+            {
+                "scheduled_touch_id": str(self.scheduled_touch_id),
+                "tenant_id": str(self.tenant_id),
+            },
+            self.otel,
+        )
 
 
 @dataclass(frozen=True, slots=True)

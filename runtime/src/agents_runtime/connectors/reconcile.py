@@ -39,6 +39,7 @@ from datetime import datetime, timedelta
 import psycopg
 
 from agents_runtime.connectors.port import ConnectorPort
+from agents_runtime.obs.context import TraceSource, no_trace_context
 from agents_runtime.repository import reconciliation as repo
 
 #: How many events one store hands over in one pass. A bound, not a limit on
@@ -72,8 +73,23 @@ async def reconcile_pass(
     stale_after: timedelta,
     stores: int = STORES_PER_PASS,
     page_size: int = PAGE_SIZE,
+    trace: TraceSource = no_trace_context,
 ) -> ReconcileResult:
-    """One sweep. Claims the stale stores, polls each, closes each."""
+    """One sweep. Claims the stale stores, polls each, closes each.
+
+    `trace` is the W3C context this pass carries into every `q_domain_events` job
+    the ingestion creates on its behalf. It matters more here than on the webhook
+    path, and D5 is the reason: the poll and the webhook enter by the same door,
+    but the webhook's trace starts outside our process while this one starts at a
+    tick of ours. Without it, "store X was reconciled" and "Y's funnel died
+    because the order was paid" are two unrelated traces telling one story.
+
+    Read ONCE per pass, like the dispatcher's: every job of one sweep belongs to
+    that sweep. The default says the honest thing — nothing is instrumented yet,
+    because the SDK and the exporter depend on Logfire and Grafana Cloud
+    (pendências B-2/B-3).
+    """
+    context = trace()
     targets = await repo.claim_sync_targets(conn, stale_after=stale_after, limit=stores)
 
     ingested = 0
@@ -94,7 +110,7 @@ async def reconcile_pass(
                 raise LookupError(f"sem adaptador para {target.platform}")
 
             for event in await connector.fetch_since(target, limit=page_size):
-                outcome = await repo.ingest_polled_event(conn, target, event)
+                outcome = await repo.ingest_polled_event(conn, target, event, otel=context)
                 if outcome == "ingested":
                     ingested += 1
                 elif outcome == "duplicate":
