@@ -65,7 +65,32 @@ def _testing_schema(dsn: str) -> None:
 
 @pytest.fixture(autouse=True)
 def clean_slate(dsn: str, _testing_schema: None) -> Iterator[None]:
-    """Empty world before and after every test."""
+    """Empty world before and after every test.
+
+    **DELETE, not TRUNCATE, and that is the whole of the S10 flaky hunt.**
+
+    The contract of this fixture has not changed: empty before, empty after,
+    every table it names. What changed is the statement, because TRUNCATE is not
+    free on an empty table — it allocates a NEW relfilenode and therefore writes
+    a dead tuple into `pg_catalog.pg_class` for the relation, every one of its
+    indexes and its toast table. Two wipes per test times ten relations times
+    their indexes, times a suite that grew all milestone, and the local database
+    ends a working day with `pg_class` holding 973 live rows and **134,352 dead
+    ones** — 31 MB of catalog that every single query has to plan against.
+
+    Measured, not guessed: the same `-m pipeline` suite takes 46s on a database
+    fresh from `supabase db reset` and 165s on the one that had been carrying a
+    milestone of runs, and the walk between them is monotonic — 46 · 56 · 63 ·
+    73 · 85 seconds over five consecutive runs, +6 MB of database each time.
+    That is where "~40s at the start of the milestone, ~90s now" came from, and
+    it is the best explanation for a suite that failed twice and passed on the
+    retry: every deadline in these tests is wall-clock (`eventually`,
+    `asyncio.wait_for`), so a world that gets uniformly slower eventually
+    crosses one, and the retry — often after a reset — crosses back.
+
+    DELETE on an empty table touches no catalog row at all. The queues were
+    already being cleared with DELETE; this makes the rest agree with them.
+    """
 
     def wipe() -> None:
         with psycopg.connect(dsn, autocommit=True) as conn:
@@ -74,14 +99,16 @@ def clean_slate(dsn: str, _testing_schema: None) -> Iterator[None]:
                 conn.execute(
                     sql.SQL("delete from pgmq.{}").format(sql.Identifier(f"a_{queue}"))
                 )
-            conn.execute("truncate internal.message_outbox, internal.webhook_events cascade")
-            conn.execute("truncate internal.runtime_heartbeats")
-            conn.execute(
-                "truncate testing.fake_channel_sends, testing.fake_channel_directives,"
-                " testing.responder_gate"
-            )
-            # Cascades through contacts, conversations, messages and accounts.
-            conn.execute("truncate public.tenants cascade")
+            conn.execute("delete from internal.message_outbox")
+            conn.execute("delete from internal.webhook_events")
+            conn.execute("delete from internal.runtime_heartbeats")
+            conn.execute("delete from testing.fake_channel_sends")
+            conn.execute("delete from testing.fake_channel_directives")
+            conn.execute("delete from testing.responder_gate")
+            # Cascades through contacts, conversations, messages and accounts —
+            # by the FKs' own `on delete cascade`, which is the same reach
+            # `truncate ... cascade` had and the same one production purges use.
+            conn.execute("delete from public.tenants")
 
     wipe()
     yield
